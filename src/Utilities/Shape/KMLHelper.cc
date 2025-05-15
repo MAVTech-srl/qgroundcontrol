@@ -150,7 +150,7 @@ bool KMLHelper::loadPolylineFromFile(const QString &kmlFile, QList<QGeoCoordinat
     QList<QGeoCoordinate> rgCoords;
     for (const QString &coordinateString : rgCoordinateStrings) {
         const QStringList rgValueStrings = coordinateString.split(",");
-        const QGeoCoordinate coord(rgValueStrings[1].toDouble(), rgValueStrings[0].toDouble());
+        const QGeoCoordinate coord(rgValueStrings[1].toDouble(), rgValueStrings[0].toDouble(), rgValueStrings[2].toDouble());
         rgCoords.append(coord);
     }
 

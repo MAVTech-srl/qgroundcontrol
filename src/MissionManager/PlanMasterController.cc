@@ -15,6 +15,7 @@
 #include "SettingsManager.h"
 #include "AppSettings.h"
 #include "JsonHelper.h"
+#include "Utilities/Shape/KMLHelper.h"
 #include "MissionManager.h"
 #include "KMLPlanDomDocument.h"
 #include "SurveyPlanCreator.h"
@@ -411,6 +412,117 @@ void PlanMasterController::loadFromFile(const QString& filename)
     }
 }
 
+void PlanMasterController::loadFromKml(const QString& filename)
+{
+    QString errorString;
+    QString errorMessage = tr("Error loading KML file (%1). %2").arg(filename).arg("%1");
+
+    if (filename.isEmpty()) {
+        return;
+    }
+
+    QFileInfo fileInfo(filename);
+    QFile file(filename);
+
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        errorString = file.errorString() + QStringLiteral(" ") + filename;
+        qgcApp()->showAppMessage(errorMessage.arg(errorString));
+        return;
+    }
+
+    bool success = false;
+    if (fileInfo.suffix() == AppSettings::kmlFileExtension) {
+        //QJsonDocument   jsonDoc;
+        QByteArray      bytes = file.readAll();
+
+        // Load KML points as coordinate list
+        QList<QGeoCoordinate> coords;
+        if (!KMLHelper::loadPolylineFromFile(filename, coords, errorMessage)) {
+            qgcApp()->showAppMessage(errorMessage.arg(errorString));
+            return;
+        }
+
+        // Init JSON plan structure
+        QJsonObject json;
+        JsonHelper::saveQGCJsonFileHeader(json, kPlanFileType, kPlanFileVersion);
+        QJsonObject missionJson;
+        _missionController.save(missionJson);
+        QJsonObject fenceJson;
+        _geoFenceController.save(fenceJson);
+        QJsonObject rallyJson;
+        _rallyPointController.save(rallyJson);
+
+        // Insert KML waypoints into JSON, to be loaded as a plan
+        QStringList coordStrings;
+        QJsonArray missionItems;
+        QJsonObject item;
+        item["AMSLAltAboveTerrain"] = QJsonValue(); // Null
+        item["Altitude"] = coords[0].altitude() + 80;
+        item["AltitudeMode"] = 1;
+        item["autoContinue"] = true;
+        item["command"] = MAV_CMD_NAV_TAKEOFF;
+        item["doJumpId"] = 1;
+        item["frame"] = MAV_FRAME_GLOBAL;
+        item["params"] = QJsonArray{ 0, 0, 0, 0, coords[0].latitude(), coords[0].longitude(), coords[0].altitude() };
+        item["type"] = "SimpleItem";
+        missionItems.append(item);
+        for (int i = 1; i < coords.size(); i++) {
+            QGeoCoordinate coord = coords[i];
+            coordStrings << QString("%1,%2,%3")
+                            .arg(coord.latitude(), 0, 'f', 8)
+                            .arg(coord.longitude(), 0, 'f', 8)
+                            .arg(coord.altitude(), 0, 'f', 2);
+            item["AMSLAltAboveTerrain"] = QJsonValue(); // set to null
+            item["Altitude"] = coord.altitude() + 80;
+            item["AltitudeMode"] = 1;
+            item["autoContinue"] = true;
+            item["command"] = MAV_CMD_NAV_WAYPOINT;
+            item["doJumpId"] = i + 1;
+            item["frame"] = MAV_FRAME_GLOBAL;
+            item["params"] = QJsonArray{ 0, 0, 0, 0, coord.latitude(), coord.longitude(), coord.altitude() };
+            item["type"] = "SimpleItem";
+
+            missionItems.append(item);
+        }
+        missionJson["items"] = missionItems;
+
+        json[kJsonMissionObjectKey] = missionJson;
+        json[kJsonGeoFenceObjectKey] = fenceJson;
+        json[kJsonRallyPointsObjectKey] = rallyJson;
+
+        //QJsonObject json = jsonDoc.object();
+        //-- Allow plugins to pre process the load
+        QGCCorePlugin::instance()->preLoadFromJson(this, json);
+
+        int version;
+        if (!JsonHelper::validateExternalQGCJsonFile(json, kPlanFileType, kPlanFileVersion, kPlanFileVersion, version, errorString)) {
+            qgcApp()->showAppMessage(errorMessage.arg(errorString));
+            return;
+        }
+
+        if (!_missionController.load(json[kJsonMissionObjectKey].toObject(), errorString) ||
+                !_geoFenceController.load(json[kJsonGeoFenceObjectKey].toObject(), errorString) ||
+                !_rallyPointController.load(json[kJsonRallyPointsObjectKey].toObject(), errorString)) {
+            qgcApp()->showAppMessage(errorMessage.arg(errorString));
+        } else {
+            //-- Allow plugins to post process the load
+            QGCCorePlugin::instance()->postLoadFromJson(this, json);
+            success = true;
+        }
+    }
+
+    if (success) {
+        _currentPlanFile = QString::asprintf("%s/%s.%s", fileInfo.path().toLocal8Bit().data(), fileInfo.completeBaseName().toLocal8Bit().data(), AppSettings::kmlFileExtension);
+    } else {
+        _currentPlanFile.clear();
+    }
+    emit currentPlanFileChanged();
+
+    if (!offline()) {
+        setDirty(true);
+    }
+}
+
 QJsonDocument PlanMasterController::saveToJson()
 {
     QJsonObject planJson;
@@ -563,6 +675,14 @@ QStringList PlanMasterController::loadNameFilters(void) const
     return filters;
 }
 
+QStringList PlanMasterController::loadNameFilterKml(void) const
+{
+    QStringList filters;
+
+    filters << tr("Supported type (*.%1)").arg(AppSettings::kmlFileExtension) <<
+               tr("All Files (*)");
+    return filters;
+}
 
 QStringList PlanMasterController::saveNameFilters(void) const
 {
