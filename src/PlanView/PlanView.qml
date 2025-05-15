@@ -218,10 +218,10 @@ Item {
             }
         }
 
-        function loadFromSelectedFile() {
-            fileDialog.title =          qsTr("Select Plan File")
-            fileDialog.planFiles =      true
-            fileDialog.nameFilters =    _planMasterController.loadNameFilters
+        function loadFromSelectedFile(isPlanType) {
+            fileDialog.title =          qsTr("Select a valid Waypoint File")
+            fileDialog.planFiles =      isPlanType
+            fileDialog.nameFilters =    (isPlanType) ? _planMasterController.loadNameFilters : _planMasterController.loadNameFilterKml
             fileDialog.openForLoad()
         }
 
@@ -319,7 +319,11 @@ Item {
         }
 
         onAcceptedForLoad: (file) => {
-            _planMasterController.loadFromFile(file)
+            if (planFiles) {
+                _planMasterController.loadFromFile(file)
+            } else {
+                _planMasterController.loadFromKml(file)
+            }
             _planMasterController.fitViewportToItems()
             _missionController.setCurrentPlanViewSeqNum(0, true)
             close()
@@ -872,11 +876,11 @@ Item {
         }
     }
 
-    function showLoadFromFileOverwritePrompt(title) {
+    function showLoadFromFileOverwritePrompt(title, isPlanType) {
         mainWindow.showMessageDialog(title,
                                      qsTr("You have unsaved/unsent changes. Loading from a file will lose these changes. Are you sure you want to load from a file?"),
                                      Dialog.Yes | Dialog.Cancel,
-                                     function() { _planMasterController.loadFromSelectedFile() } )
+                                     function() { _planMasterController.loadFromSelectedFile(isPlanType) } )
     }
 
     Component {
@@ -1066,9 +1070,9 @@ Item {
                     onClicked: {
                         dropPanel.hide()
                         if (_planMasterController.dirty) {
-                            showLoadFromFileOverwritePrompt(columnHolder._overwriteText)
+                            showLoadFromFileOverwritePrompt(columnHolder._overwriteText, true)
                         } else {
-                            _planMasterController.loadFromSelectedFile()
+                            _planMasterController.loadFromSelectedFile(true)
                         }
                     }
                 }
@@ -1110,6 +1114,21 @@ Item {
                         }
                         dropPanel.hide()
                         _planMasterController.saveKmlToSelectedFile()
+                    }
+                }
+
+                QGCButton {
+                    Layout.columnSpan:  3
+                    Layout.fillWidth:   true
+                    text:               qsTr("Import Mission Waypoints from KML")
+                    enabled:            !_planMasterController.syncInProgress
+                    onClicked: {
+                        dropPanel.hide()
+                        if (_planMasterController.dirty) {
+                            showLoadFromFileOverwritePrompt(columnHolder._overwriteText, false)
+                        } else {
+                            _planMasterController.loadFromSelectedFile(false)
+                        }
                     }
                 }
             }

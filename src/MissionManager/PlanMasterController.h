@@ -52,6 +52,7 @@ public:
     Q_PROPERTY(QString                  kmlFileExtension        READ kmlFileExtension                       CONSTANT)
     Q_PROPERTY(QString                  currentPlanFile         READ currentPlanFile                        NOTIFY currentPlanFileChanged)
     Q_PROPERTY(QStringList              loadNameFilters         READ loadNameFilters                        CONSTANT)                       ///< File filter list loading plan files
+    Q_PROPERTY(QStringList              loadNameFilterKml       READ loadNameFilterKml                      CONSTANT)                       ///< File filter list loading KML files
     Q_PROPERTY(QStringList              saveNameFilters         READ saveNameFilters                        CONSTANT)                       ///< File filter list saving plan files
     Q_PROPERTY(QmlObjectListModel*      planCreators            MEMBER _planCreators                        NOTIFY planCreatorsChanged)
 
@@ -78,6 +79,7 @@ public:
     Q_INVOKABLE void loadFromVehicle(void);
     Q_INVOKABLE void sendToVehicle(void);
     Q_INVOKABLE void loadFromFile(const QString& filename);
+    Q_INVOKABLE void loadFromKml(const QString& filename);
     Q_INVOKABLE void saveToCurrent();
     Q_INVOKABLE void saveToFile(const QString& filename);
     Q_INVOKABLE void saveToKml(const QString& filename);
@@ -88,17 +90,18 @@ public:
     GeoFenceController*     geoFenceController(void)    { return &_geoFenceController; }
     RallyPointController*   rallyPointController(void)  { return &_rallyPointController; }
 
-    bool        offline         (void) const { return _offline; }
-    bool        containsItems   (void) const;
-    bool        syncInProgress  (void) const;
-    bool        dirty           (void) const;
-    void        setDirty        (bool dirty);
-    QString     fileExtension   (void) const;
-    QString     kmlFileExtension(void) const;
-    QString     currentPlanFile (void) const { return _currentPlanFile; }
-    QStringList loadNameFilters (void) const;
-    QStringList saveNameFilters (void) const;
-    bool        isEmpty         (void) const;
+    bool        offline          (void) const { return _offline; }
+    bool        containsItems    (void) const;
+    bool        syncInProgress   (void) const;
+    bool        dirty            (void) const;
+    void        setDirty         (bool dirty);
+    QString     fileExtension    (void) const;
+    QString     kmlFileExtension (void) const;
+    QString     currentPlanFile  (void) const { return _currentPlanFile; }
+    QStringList loadNameFilters  (void) const;
+    QStringList loadNameFilterKml(void) const;
+    QStringList saveNameFilters  (void) const;
+    bool        isEmpty          (void) const;
 
     void        setFlyView(bool flyView) { _flyView = flyView; }
 
