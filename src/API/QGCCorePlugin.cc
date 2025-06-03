@@ -21,6 +21,7 @@
 #include "VideoBackend.h"
 #include "SurveyPlanCreator.h"
 #include "CorridorScanPlanCreator.h"
+#include "SARScanPlanCreator.h"
 #include "StructureScanPlanCreator.h"
 #include "SurveyComplexItem.h"
 #include "CorridorScanComplexItem.h"
@@ -408,6 +409,7 @@ QVariantList QGCCorePlugin::complexMissionItemNames(Vehicle *vehicle)
     QVariantList items;
     items.append(makeEntry(SurveyComplexItem::canonicalName,       SurveyComplexItem::tr(SurveyComplexItem::canonicalName)));
     items.append(makeEntry(CorridorScanComplexItem::canonicalName, CorridorScanComplexItem::tr(CorridorScanComplexItem::canonicalName)));
+    //items.append(makeEntry(SARScanComplexItem::canonicalName, SARScanComplexItem::tr(SARScanComplexItem::canonicalName)));
     if (vehicle->multiRotor() || vehicle->vtol()) {
         items.append(makeEntry(StructureScanComplexItem::canonicalName, StructureScanComplexItem::tr(StructureScanComplexItem::canonicalName)));
     }
@@ -420,6 +422,7 @@ QList<PlanCreator*> QGCCorePlugin::planCreators(PlanMasterController *planMaster
     return {
         new SurveyPlanCreator(planMasterController),
         new CorridorScanPlanCreator(planMasterController),
+        new SARScanPlanCreator(planMasterController),
         new StructureScanPlanCreator(planMasterController),
         new BlankPlanCreator(planMasterController),
     };
@@ -434,6 +437,8 @@ ComplexMissionItem *QGCCorePlugin::createComplexMissionItem(
     if (complexItemType == SurveyComplexItem::canonicalName || complexItemType == SurveyComplexItem::jsonComplexItemTypeValue) {
         return new SurveyComplexItem(masterController, flyView, kmlOrShpFile);
     } else if (complexItemType == CorridorScanComplexItem::canonicalName || complexItemType == CorridorScanComplexItem::jsonComplexItemTypeValue) {
+        return new CorridorScanComplexItem(masterController, flyView, kmlOrShpFile);
+    } else if (complexItemType == "SAR Scan") {
         return new CorridorScanComplexItem(masterController, flyView, kmlOrShpFile);
     } else if (complexItemType == StructureScanComplexItem::canonicalName || complexItemType == StructureScanComplexItem::jsonComplexItemTypeValue) {
         return new StructureScanComplexItem(masterController, flyView, kmlOrShpFile);
