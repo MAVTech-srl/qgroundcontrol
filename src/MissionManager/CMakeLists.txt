@@ -60,6 +60,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         RallyPoint.h
         RallyPointManager.cc
         RallyPointManager.h
+        SARScanPlanCreator.cc
+        SARScanPlanCreator.h
         Section.h
         SimpleMissionItem.cc
         SimpleMissionItem.h
@@ -101,6 +103,7 @@ qt_add_resources(${CMAKE_PROJECT_NAME} missionmanager_plancreator_images
     FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/BlankPlanCreator.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/CorridorScanPlanCreator.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/SARScanPlanCreator.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/StructureScanPlanCreator.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/SurveyPlanCreator.png"
 )
