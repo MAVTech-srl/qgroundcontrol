@@ -226,6 +226,17 @@ Rectangle {
                 }
 
                 SectionHeader {
+                    id:                 presetsDecimationHeader
+                    Layout.fillWidth:   true
+                    text:               qsTr("Path decimation")
+                }
+
+                TransectStyleComplexItemDecimation {
+                    Layout.fillWidth:   true
+                    visible:            presetsDecimationHeader.checked
+                }
+
+                SectionHeader {
                     id:                 presetsStatsHeader
                     Layout.fillWidth:   true
                     text:               qsTr("Statistics")
