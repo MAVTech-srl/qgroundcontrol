@@ -127,6 +127,7 @@ Item {
         title:          qsTr("Select Polyline File")
 
         onAcceptedForLoad: (file) => {
+            mapPolyline.setDecimationSlider(-1)
             mapPolyline.loadKMLOrSHPFile(file)
             mapFitFunctions.fitMapViewportToMissionItems()
             close()
@@ -331,13 +332,17 @@ Item {
                 _horizontalPadding: 0
                 text:               qsTr("Basic")
                 visible:            !mapPolyline.traceMode
-                onClicked:          _resetPolyline()
+                onClicked:          {
+                    mapPolyline.setDecimationSlider(-1)
+                    _resetPolyline()
+                }
             }
 
             QGCButton {
                 _horizontalPadding: 0
                 text:               mapPolyline.traceMode ? qsTr("Done Tracing") : qsTr("Trace")
                 onClicked: {
+                    mapPolyline.setDecimationSlider(-1)
                     if (mapPolyline.traceMode) {
                         if (mapPolyline.count < 2) {
                             _restorePreviousVertices()

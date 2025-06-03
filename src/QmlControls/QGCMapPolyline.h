@@ -36,6 +36,7 @@ public:
     Q_PROPERTY(bool                 empty       READ empty                                  NOTIFY isEmptyChanged)
     Q_PROPERTY(bool                 traceMode   READ traceMode      WRITE setTraceMode      NOTIFY traceModeChanged)
     Q_PROPERTY(int              selectedVertex  READ selectedVertex WRITE selectVertex      NOTIFY selectedVertexChanged)
+    Q_PROPERTY(int                 sliderValue  READ sliderValue    WRITE setDecimationSlider NOTIFY decimationSliderChanged)
 
     Q_INVOKABLE void clear(void);
     Q_INVOKABLE void appendVertex(const QGeoCoordinate& coordinate);
@@ -63,6 +64,10 @@ public:
 
     /// Returns the path in a list of QGeoCoordinate's format
     QList<QGeoCoordinate> coordinateList(void) const;
+
+    /// Decimates the path to simplify it
+    Q_INVOKABLE void decimate(int epsilon);
+    Q_INVOKABLE void setDecimationSlider(int value);
 
     /// Returns the QGeoCoordinate for the vertex specified
     Q_INVOKABLE QGeoCoordinate vertexCoordinate(int vertex) const;
@@ -94,6 +99,7 @@ public:
     bool            empty       (void) const { return _polylineModel.count() == 0; }
     bool            traceMode   (void) const { return _traceMode; }
     int             selectedVertex()   const { return _selectedVertexIndex; }
+    int             sliderValue (void) const { return _sliderValue; }
 
     QmlObjectListModel* qmlPathModel(void) { return &_polylineModel; }
     QmlObjectListModel& pathModel   (void) { return _polylineModel; }
@@ -116,6 +122,7 @@ signals:
     void isEmptyChanged     (void);
     void traceModeChanged   (bool traceMode);
     void selectedVertexChanged(int index);
+    void decimationSliderChanged(void);
 
 private slots:
     void _polylineModelCountChanged(int count);
@@ -130,6 +137,9 @@ private:
 
     QVariantList        _polylinePath;
     QmlObjectListModel  _polylineModel;
+    QList<QGeoCoordinate> _undecimatedPolylinePath;
+    bool                _decimated;
+    int                 _sliderValue = 0;
     bool                _deferredPathChanged = false;
     bool                _dirty;
     bool                _interactive;

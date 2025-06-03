@@ -553,7 +553,7 @@ ApplicationWindow {
 
     Popup {
         id:                 criticalVehicleMessagePopup
-        y:                  ScreenTools.toolbarHeight + ScreenTools.defaultFontPixelHeight
+        y:                  ScreenTools.toolbarHeight + ScreenTools.defaultFontPixelHeight //+ (criticalVehicleMessageText.visible ? criticalVehicleMessageText.height + 5 : 0)// add buffer space in case of confirmation slider
         x:                  Math.round((mainWindow.width - width) * 0.5)
         width:              mainWindow.width  * 0.55
         height:             criticalVehicleMessageText.contentHeight + ScreenTools.defaultFontPixelHeight * 2

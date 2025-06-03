@@ -4,6 +4,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         DeviceInfo.h
         JsonHelper.cc
         JsonHelper.h
+        RDP/RDP.cc
+        RDP/RDP.h
         FileSystem/QGCCachedFileDownload.cc
         FileSystem/QGCCachedFileDownload.h
         FileSystem/QGCFileDownload.cc
