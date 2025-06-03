@@ -626,6 +626,7 @@ void PlanMasterController::_updatePlanCreatorsList(void)
             _planCreators->append(new BlankPlanCreator(this, this));
             _planCreators->append(new SurveyPlanCreator(this, this));
             _planCreators->append(new CorridorScanPlanCreator(this, this));
+            //_planCreators->append(new SARPlanCreator(this, this));
             emit planCreatorsChanged(_planCreators);
         }
 

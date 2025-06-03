@@ -202,6 +202,7 @@ qt_add_qml_module(QGroundControlControlsModule
         TakeoffItemMapVisual.qml
         TerrainStatus.qml
         TransectStyleComplexItemEditor.qml
+        TransectStyleComplexItemDecimation.qml
         TransectStyleComplexItemStats.qml
         TransectStyleComplexItemTabBar.qml
         TransectStyleComplexItemTerrainFollow.qml
