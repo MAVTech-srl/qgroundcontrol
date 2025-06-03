@@ -7,6 +7,7 @@
 #include "QGCApplication.h"
 #include "QGCLoggingCategory.h"
 #include "ShapeFileHelper.h"
+#include "RDP/RDP.h"
 
 #include <QtCore/QLineF>
 #include <QMetaMethod>
@@ -392,6 +393,10 @@ bool QGCMapPolyline::loadKMLOrSHPFile(const QString &file)
     appendVertices(rgCoords);
     endReset();
 
+    if (_defaultDecimationValue > 0) {
+        setDecimationSlider(_defaultDecimationValue);
+    }
+
     return true;
 }
 
@@ -468,4 +473,52 @@ void QGCMapPolyline::selectVertex(int index)
     }
 
     emit selectedVertexChanged(_selectedVertexIndex);
+}
+
+void QGCMapPolyline::decimate(int epsilon)
+{
+    // Back up the original path for consistent further decimation or resetting 
+    if (!_decimated) {
+        _undecimatedPolylinePath = coordinateList();
+    }
+
+    // Only resets the decimation logic without restoring the path, called by other GUI elements that need to override the path themselves
+    if (epsilon == -1) {
+        _decimated = false;
+        return;
+    }
+
+    // Setting the slider back to 0 restores the original path and resets the decimation logic
+    if (epsilon == 0) {
+        beginReset();
+        setPath(_undecimatedPolylinePath);
+        _decimated = false;
+        endReset();
+        emit pathChanged();
+        return;
+    }
+
+    // Decimate waypoints
+    beginReset();
+    QList<QGeoCoordinate> coordinates = RDP::simplify(_undecimatedPolylinePath, epsilon);
+    setPath(coordinates);
+    _decimated = true;
+    endReset();
+    emit pathChanged();
+}
+
+void QGCMapPolyline::setDecimationSlider(int value)
+{
+    decimate(value);
+    if (value > -1) {
+        _sliderValue = value;
+    } else {
+        _sliderValue = 0;
+    }
+    emit decimationSliderChanged();
+}
+
+void QGCMapPolyline::setDefaultDecimation(int value)
+{
+    _defaultDecimationValue = value;
 }
