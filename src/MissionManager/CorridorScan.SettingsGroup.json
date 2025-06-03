@@ -18,7 +18,7 @@
     "units":            "m",
     "min":              0,
     "decimalPlaces":    1,
-    "default":     50
+    "default":     0
 },
 {
     "name":             "Trigger distance",
