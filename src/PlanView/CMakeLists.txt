@@ -50,6 +50,7 @@ qt_add_qml_module(PlanViewModule
         SurveyMapVisual.qml
         TakeoffItemMapVisual.qml
         TerrainStatus.qml
+        TransectStyleComplexItemDecimation.qml
         TransectStyleComplexItemEditor.qml
         TransectStyleComplexItemStats.qml
         TransectStyleComplexItemTabBar.qml

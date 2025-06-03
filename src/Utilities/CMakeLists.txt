@@ -9,6 +9,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         AppMessages.h
         DataRateTracker.cc
         DataRateTracker.h
+        RDP/RDP.cc
+        RDP/RDP.h
         QGCCommandLineParser.cc
         QGCCommandLineParser.h
 )
