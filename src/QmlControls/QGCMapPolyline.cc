@@ -374,6 +374,10 @@ bool QGCMapPolyline::loadKMLOrSHPFile(const QString &file)
     appendVertices(rgCoords);
     endReset();
 
+    if (_defaultDecimationValue > 0) {
+        setDecimationSlider(_defaultDecimationValue);
+    }
+
     return true;
 }
 
@@ -514,4 +518,9 @@ void QGCMapPolyline::setDecimationSlider(int value)
         _sliderValue = 0;
     }
     emit decimationSliderChanged();
+}
+
+void QGCMapPolyline::setDefaultDecimation(int value)
+{
+    _defaultDecimationValue = value;
 }

@@ -20,7 +20,13 @@ SARScanPlanCreator::SARScanPlanCreator(PlanMasterController* planMasterControlle
 void SARScanPlanCreator::createPlan(const QGeoCoordinate& mapCenterCoord)
 {
     _planMasterController->removeAll();
+
     VisualMissionItem* takeoffItem = _missionController->insertTakeoffItem(mapCenterCoord, -1);
-    _missionController->insertComplexMissionItem(CorridorScanComplexItem::name, mapCenterCoord, -1, true);
+    _missionController->setGlobalAltitudeMode(QGroundControlQmlGlobal::AltitudeModeCalcAboveTerrain);
+
+    //_missionController->insertComplexMissionItem(CorridorScanComplexItem::name, mapCenterCoord, -1, true);
+    CorridorScanComplexItem* scanItem = qobject_cast<CorridorScanComplexItem*>(_missionController->insertComplexMissionItem("SAR Scan", mapCenterCoord, -1, true));
+    scanItem->corridorPolyline()->setDefaultDecimation(50);
+
     _missionController->insertLandItem(mapCenterCoord, -1);
 }

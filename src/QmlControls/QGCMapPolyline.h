@@ -109,6 +109,7 @@ public:
     void setInteractive (bool interactive);
     void setTraceMode   (bool traceMode);
     void selectVertex   (int index);
+    void setDefaultDecimation(int value);
 
     static constexpr const char* jsonPolylineKey = "polyline";
 
@@ -140,6 +141,7 @@ private:
     QList<QGeoCoordinate> _undecimatedPolylinePath;
     bool                _decimated;
     int                 _sliderValue = 0;
+    int                 _defaultDecimationValue = 0;
     bool                _deferredPathChanged = false;
     bool                _dirty;
     bool                _interactive;
