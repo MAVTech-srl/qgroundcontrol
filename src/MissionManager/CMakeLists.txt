@@ -52,6 +52,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         RallyPoint.h
         RallyPointManager.cc
         RallyPointManager.h
+        SARScanPlanCreator.cc
+        SARScanPlanCreator.h
         Section.h
         SimpleMissionItem.cc
         SimpleMissionItem.h

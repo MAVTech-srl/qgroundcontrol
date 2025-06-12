@@ -20,6 +20,7 @@
 #include "SurveyPlanCreator.h"
 #include "StructureScanPlanCreator.h"
 #include "CorridorScanPlanCreator.h"
+#include "SARScanPlanCreator.h"
 #include "BlankPlanCreator.h"
 #include "QmlObjectListModel.h"
 #include "GeoFenceManager.h"
@@ -626,16 +627,16 @@ void PlanMasterController::_updatePlanCreatorsList(void)
             _planCreators->append(new BlankPlanCreator(this, this));
             _planCreators->append(new SurveyPlanCreator(this, this));
             _planCreators->append(new CorridorScanPlanCreator(this, this));
-            //_planCreators->append(new SARPlanCreator(this, this));
+            _planCreators->append(new SARScanPlanCreator(this, this));
             emit planCreatorsChanged(_planCreators);
         }
 
         if (_managerVehicle->fixedWing()) {
-            if (_planCreators->count() == 4) {
+            if (_planCreators->count() == 5) {
                 _planCreators->removeAt(_planCreators->count() - 1);
             }
         } else {
-            if (_planCreators->count() != 4) {
+            if (_planCreators->count() != 5) {
                 _planCreators->append(new StructureScanPlanCreator(this, this));
             }
         }
