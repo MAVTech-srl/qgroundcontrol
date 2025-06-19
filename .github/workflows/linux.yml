@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - mavtech
       - 'Stable*'
     tags:
       - 'v*'
