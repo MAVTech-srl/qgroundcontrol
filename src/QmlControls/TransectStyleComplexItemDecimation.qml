@@ -21,7 +21,7 @@ Column {
         anchors.horizontalCenter: parent.horizontalCenter
         width: parent.width
 
-        from: 0
+        from: 25
         to: 100
         stepSize: 5
         value: missionItem.corridorPolyline.sliderValue

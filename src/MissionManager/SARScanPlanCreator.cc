@@ -25,5 +25,7 @@ void SARScanPlanCreator::createPlan(const QGeoCoordinate& mapCenterCoord)
     _missionController->setGlobalAltitudeMode(QGroundControlQmlGlobal::AltitudeModeCalcAboveTerrain);
 
     CorridorScanComplexItem* scanItem = qobject_cast<CorridorScanComplexItem*>(_missionController->insertComplexMissionItem("SAR Scan", mapCenterCoord, -1, true));
-    scanItem->corridorPolyline()->setDefaultDecimation(50);
+    scanItem->corridorPolyline()->setDefaultDecimation(40);
+
+    scanItem->corridorWidth()->setRawValue(10); // Hard-code corridor width
 }
