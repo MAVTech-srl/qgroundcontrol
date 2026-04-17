@@ -20,6 +20,12 @@
     "shortDesc": "Currently selected elevation map provider",
     "type":      "string",
     "default":   "Copernicus"
+},
+{
+    "name":      "airspaceFilePath",
+    "shortDesc": "Path to the JSON Airspace file for the flight map overlay.",
+    "type":      "string",
+    "default":   "Please select a JSON file"
 }
 ]
 }

@@ -23,4 +23,5 @@ public:
     DEFINE_SETTINGFACT(mapProvider)
     DEFINE_SETTINGFACT(mapType)
     DEFINE_SETTINGFACT(elevationMapProvider)
+    DEFINE_SETTINGFACT(airspaceFilePath)
 };
