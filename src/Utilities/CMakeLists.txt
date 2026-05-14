@@ -45,6 +45,8 @@ target_include_directories(${CMAKE_PROJECT_NAME}
 #===========================================================================#
 
 add_subdirectory(Audio)
+add_subdirectory(Clipper2)
 add_subdirectory(Compression)
 add_subdirectory(Geo)
+add_subdirectory(RTree)
 add_subdirectory(Shape)

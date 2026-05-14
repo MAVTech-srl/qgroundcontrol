@@ -42,6 +42,20 @@ Map {
     property var    _activeVehicle:             QGroundControl.multiVehicleManager.activeVehicle
     property var    _activeVehicleCoordinate:   _activeVehicle ? _activeVehicle.coordinate : QtPositioning.coordinate()
 
+    Timer {
+        id: viewportUpdateTimer
+        interval: 300
+        onTriggered: {
+            const rect = _map.visibleRegion.boundingGeoRectangle()
+            QGroundControl.geoZoneManager.updateViewport(
+                rect.topLeft.latitude,
+                rect.topLeft.longitude,
+                rect.bottomRight.latitude,
+                rect.bottomRight.longitude
+            )
+        }
+    }
+
     function setVisibleRegion(region) {
         // TODO: Is this still necessary with Qt 5.11?
         // This works around a bug on Qt where if you set a visibleRegion and then the user moves or zooms the map
@@ -218,5 +232,27 @@ Map {
                 angle:          isNaN(gcsHeading) ? 0 : gcsHeading
             }
         }
+    }
+
+    MapItemView {
+        model: QGroundControl.geoZoneManager.model
+
+        delegate: MapPolygon {
+            path: model.path
+            color: model.color
+            opacity: 0.4
+
+            border.color: "transparent"
+            border.width: 0
+        }
+    }
+
+    onVisibleRegionChanged: {
+        viewportUpdateTimer.restart()
+    }
+
+    Component.onCompleted: {
+        console.log("Loading geofences from file: " + QGroundControl.settingsManager.flightMapSettings.airspaceFilePath.rawValue)
+        QGroundControl.geoZoneManager.loadFromFile(QGroundControl.settingsManager.flightMapSettings.airspaceFilePath.rawValue)
     }
 } // Map
