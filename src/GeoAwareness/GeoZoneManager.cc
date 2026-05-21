@@ -95,7 +95,7 @@ void GeoZoneManager::loadFromFile(const QString& path)
         QJsonObject fObj = fVal.toObject();
 
         QString id = fObj["identifier"].toString();
-        //QString type = fObj["restriction"].toString();
+        QString name = fObj["name"].toString();
 
         QJsonArray geometryArray = fObj["geometry"].toArray();
         if (geometryArray.isEmpty()) {
@@ -108,6 +108,7 @@ void GeoZoneManager::loadFromFile(const QString& path)
             zoneGeometry = geometry.toObject();
             GeoZone zone;
             zone.id = id;
+            zone.name = name;
 
             // Altitude
             zone.minAltitude = zoneGeometry["lowerLimit"].toDouble();
@@ -140,9 +141,9 @@ void GeoZoneManager::loadFromFile(const QString& path)
                 continue;
             }
 
-            zones.append(zone);
             //qDebug() << "Parsed GeoZone: index " << index << ", ID: " << zone.id << ", type: " << zone.type << ", minAlt: " << zone.minAltitude << ", polygon points: " << zone.polygon.size();
             insertZoneIntoTree(zone, index++);
+            zones.append(zone);
         }
     }
 
@@ -188,7 +189,7 @@ void GeoZoneManager::loadFromFile(const QString& path)
             << aabb.m_max[2];
     }*/
 
-    qDebug() << "Clipped GeoZones: " << zones.size();
+    qDebug() << "Loaded GeoZones: " << zones.size();
 
     _model.setZones(zones);
     _zones = zones; // Store zones for later viewport queries
@@ -210,16 +211,17 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
     int results = _zoneTree.Search(min, max, [this, &viewportZoneIndexes, &resultsString](const int& index) {
         viewportZoneIndexes.push_back(index);
         // Debug
-        resultsString += index + " (" + _zones[index].id + "), ";
-        //qDebug() << "Found zone in viewport: idx " << index << ", ID " << _zones[index].id << "), minAlt: " << _zones[index].minAltitude << ", polygon points: " << _zones[index].polygon.size();
+        resultsString += QString::number(index) + " (" + _zones[index].name + ", minLonLat: " + QString::number(_zones[index].minLonLat[0]) + "|" + QString::number(_zones[index].minLonLat[1]) + ", maxLonLat: " + QString::number(_zones[index].maxLonLat[0]) + "|" + QString::number(_zones[index].maxLonLat[1]) + "), ";
+        //qDebug() << "Found zone in viewport: idx " << index << ", Name: " << _zones[index].name << "), minAlt: " << _zones[index].minAltitude << ", polygon points: " << _zones[index].polygon.size();
         return true; // continue searching
     });
-    //qDebug() << "Zones in viewport: " << results << " (indices: " << viewportZoneIndexes << ")";
+    qDebug() << "Zones in viewport " << results << ": " << resultsString << ")";
 
     // Go through each zone's nearby intersecting zones and clip them based on altitude layers
     for (int i : viewportZoneIndexes) {
         // Skip already clipped zones
         if (_zones[i].alreadyClipped) {
+            qDebug() << "Skipping zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") because it has already been clipped by higher priority zones";
             continue;
         }
 
@@ -229,18 +231,20 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
             intersectingIndexes.push_back(index);
             return true; // continue searching
         });
+        qDebug() << "---- About to check intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") and " << intersectingZoneNumber << " other zones in the viewport";
 
         Clipper2Lib::PathsD currentPath = { geoZoneToClipperPath(_zones[i].polygon) };
         for (int j : intersectingIndexes) {
-            //qDebug() << "Checking intersection between zone " << _zones[i].id << " (minAlt " << _zones[i].minAltitude << ") and zone " << _zones[j].id << " (minAlt " << _zones[j].minAltitude << ")";
             // Only clip current zone intersections with OTHER zones of equal or higher priority (lower minAltitude)
             if (i == j || _zones[i].minAltitude < _zones[j].minAltitude) {
+                qDebug() << "Skipping zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << ")";
                 continue;
             }
+            qDebug() << "Checking intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") and zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << ")";
 
-            if (_zones[i].id == "A632187") {
+            /*if (_zones[i].id == "A632187") {
                 qDebug() << "------- REACHED ZONE A632187 -------";
-            }
+            }*/
 
             Clipper2Lib::PathsD intersectingPath = { geoZoneToClipperPath(_zones[j].polygon) };
             currentPath = Clipper2Lib::Difference(currentPath, intersectingPath, Clipper2Lib::FillRule::NonZero, GEOZONE_CLIPPER_PRECISION);
@@ -248,30 +252,35 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
             if (currentPath.empty()) {
                 _zones[i].polygon.clear();
                 _zoneTree.Remove(_zones[i].minLonLat, _zones[i].maxLonLat, i);
-                qDebug() << "Zone " << _zones[i].id << " completely covered by higher priority zones, removing from tree and skipping further clipping, path size: " << currentPath.size();
+                qDebug() << "Zone " << _zones[i].name << " completely covered by higher priority zones, removing from tree and skipping further clipping, path size: " << currentPath.size();
                 break;
             } else {
                 _zones[i].polygon = clipperPathToGeoZone(currentPath[0]);
-                qDebug() << "Clipped zone " << _zones[i].id << " (" << _zones[i].minAltitude << "m)" << " with zone " << _zones[j].id << " (" << _zones[j].minAltitude << "m), remaining polygon points: " << _zones[i].polygon.size() << ", path size: " << currentPath.size();
+                qDebug() << "Clipped zone " << _zones[i].name << " (" << _zones[i].minAltitude << "m)" << " with zone " << _zones[j].name << " (" << _zones[j].minAltitude << "m), remaining polygon points: " << _zones[i].polygon.size() << ", path size: " << currentPath.size();
+
+                // Update bounding box after clipping
+                //insertZoneIntoTree(_zones[i], i);
 
                 // Split further subzones into new zones of same ID and minAlt
-                /*if (currentPath.size() > 1) {
-                    for (int i = 1; i < currentPath.size(); i++) {
+                if (currentPath.size() > 1) {
+                    for (int k = 1; k < currentPath.size(); k++) {
                         GeoZone newSubZone;
                         newSubZone.id = _zones[i].id;
-                        newSubZone.type = _zones[i].type;
+                        newSubZone.name = _zones[i].name;
                         newSubZone.minAltitude = _zones[i].minAltitude;
                         newSubZone.maxAltitude = _zones[i].maxAltitude;
-                        newSubZone.polygon = clipperPathToGeoZone(currentPath[i]);
+                        newSubZone.polygon = clipperPathToGeoZone(currentPath[k]);
+                        newSubZone.alreadyClipped = true;
                         _zones.append(newSubZone);
                         insertZoneIntoTree(_zones.last(), _zones.size() - 1);
-                        qDebug() << "Zone " << _zones[i].id << " has been split into " << currentPath.size() << " polygons after clipping with zone " << _zones[j].id;
+                        qDebug() << "Zone " << _zones[i].name << " has been split into " << currentPath.size() << " polygons with minAltitude " << _zones[i].minAltitude << " after clipping with zone " << _zones[j].name;
                     }
-                }*/
+                }
             }
         }
 
         _zones[i].alreadyClipped = true;
+        qDebug() << "Set zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") as clipped by higher priority zones, final polygon points: " << _zones[i].polygon.size();
         break; // TODO: remove this break to handle all zones in the viewport
     }
 
@@ -282,7 +291,7 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
     /*if (++displayedZone >= _zones.size())
         displayedZone = 0;
     _model.setZones({_zones[displayedZone]});
-    qDebug() << "Displaying zone Index: " << displayedZone << ", ID: " << _zones[displayedZone].id;*/
+    qDebug() << "Displaying zone Index: " << displayedZone << ", Name: " << _zones[displayedZone].name;*/
 }
 
 void GeoZoneManager::insertZoneIntoTree(GeoZone& zone, int index)
@@ -310,6 +319,6 @@ void GeoZoneManager::insertZoneIntoTree(GeoZone& zone, int index)
     zone.maxLonLat[0] = maxLon;
     zone.maxLonLat[1] = maxLat;
 
-    // Insert into R-tree (using zone ID as data)
+    // Insert into R-tree (using zone index as data)
     _zoneTree.Insert(min, max, index);
 }
