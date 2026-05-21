@@ -47,6 +47,7 @@ private:
     struct GeoZone {
         QString id;
         QString type;
+        QString name;
         QList<QGeoCoordinate> polygon;
         double minAltitude = 0;
         double maxAltitude = 120;
