@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - 'master'
+      - 'mavtech_v4.4'
       - 'Stable*'
     tags:
       - 'v*'
@@ -27,7 +28,7 @@ env:
 
 jobs:
   build:
-    runs-on:  ubuntu-20.04
+    runs-on:  ubuntu-latest
 
     strategy:
       matrix:
@@ -73,8 +74,44 @@ jobs:
           ndk-version: r21e
           add-to-path: false
 
+      - name: Set up Java 11 for build
+        uses: actions/setup-java@v4
+        id: setup-java-11
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Set up Java 17 for sdkmanager
+        uses: actions/setup-java@v4
+        id: setup-java-17
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verify Java 17 installation for sdkmanager
+        env:
+          JAVA_HOME: ${{ steps.setup-java-17.outputs.java-home }}
+        run: |
+          java -version
+          javac -version
+          echo "JAVA_HOME=$JAVA_HOME"
+
       - name: Remove Android SDKs to force usage of android-33 only
-        run: ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --list_installed | grep "platforms;android-" | grep -v "platforms;android-33 " | awk '{print $1}' | xargs -I {} ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --uninstall "{}"
+        env:
+          JAVA_HOME: ${{ steps.setup-java-17.outputs.java-home }}
+        run: |
+          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --list_installed | grep "platforms;android-" | grep -v "platforms;android-33 " | awk '{print $1}' | xargs -r -I {} ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --uninstall "{}"
+
+      - name: Install Android 33 platform and build tools
+        env:
+          JAVA_HOME: ${{ steps.setup-java-17.outputs.java-home }}
+        run: |
+          yes | ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.0" "platform-tools" || true
+
+      - name: Verify installed Android SDK platform
+        run: |
+          echo "SDK root: ${ANDROID_SDK_ROOT}"
+          ls -la ${ANDROID_SDK_ROOT}/platforms
 
       - name: Install ccache
         run:  sudo apt-get install ccache
@@ -122,9 +159,12 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
+          JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
         run:  |
-            qmake -r ${SOURCE_DIR}/qgroundcontrol.pro -spec android-clang CONFIG+=${BUILD_TYPE} CONFIG+=installer ANDROID_ABIS="${{ matrix.eabi }}"
-            make -j2
+          export JAVA_HOME="${JAVA_HOME:-${JAVA_HOME_11_X64}}"
+          export PATH="$JAVA_HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+          qmake -r ${SOURCE_DIR}/qgroundcontrol.pro -spec android-clang CONFIG+=${BUILD_TYPE} CONFIG+=installer ANDROID_ABIS="${{ matrix.eabi }}"
+          make -j2
 
       - name: ccache post-run
         run:  ccache -s
@@ -149,14 +189,22 @@ jobs:
         if:                 github.event_name == 'push'
         working-directory:  ${{ runner.temp }}/shadow_build_dir/package
         run: |
-              aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
-              aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-              aws s3 cp ${{ matrix.ARTIFACT }} s3://qgroundcontrol/builds/${{ github.ref_name }}/${{ matrix.ARTIFACT }} --region us-west-2 --acl public-read
+              if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+                echo "AWS secrets not set; skipping S3 upload"
+              else
+                aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+                aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                aws s3 cp ${{ matrix.ARTIFACT }} s3://qgroundcontrol/builds/${{ github.ref_name }}/${{ matrix.ARTIFACT }} --region us-west-2 --acl public-read
+              fi
 
       - name: Upload tagged stable build to S3 latest Bucket
         if:                 github.event_name == 'push' && github.ref_type == 'tag'
         working-directory:  ${{ runner.temp }}/shadow_build_dir/package
         run: |
-              aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
-              aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-              aws s3 cp ${{ matrix.ARTIFACT }} s3://qgroundcontrol/latest/${{ matrix.ARTIFACT }} --region us-west-2 --acl public-read
+              if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+                echo "AWS secrets not set; skipping S3 upload"
+              else
+                aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+                aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                aws s3 cp ${{ matrix.ARTIFACT }} s3://qgroundcontrol/latest/${{ matrix.ARTIFACT }} --region us-west-2 --acl public-read
+              fi

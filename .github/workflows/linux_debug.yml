@@ -4,6 +4,7 @@ on:
   push:
     branches:
     - 'master'
+    - 'mavtech_v4.4'
     paths-ignore:
       - 'docs/**'
   pull_request:
@@ -23,7 +24,7 @@ env:
 
 jobs:
   build:
-    runs-on:  ubuntu-20.04
+    runs-on:  ubuntu-latest
 
     steps:
       - name: Checkout repo
