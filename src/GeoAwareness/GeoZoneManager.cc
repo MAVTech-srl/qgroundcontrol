@@ -116,24 +116,31 @@ void GeoZoneManager::loadFromFile(const QString& path)
 
             // Horizontal projection
             QJsonObject proj = zoneGeometry["horizontalProjection"].toObject();
-            QJsonArray coordinates = proj["coordinates"].toArray()[0].toArray();
+            QJsonArray coordinateLists = proj["coordinates"].toArray();
 
-            if (coordinates.isEmpty()) {
+            if (coordinateLists.isEmpty()) {
                 continue;
             }
 
-            // Polygon
-            for (const auto& coord : coordinates) {
-                QJsonArray pair = coord.toArray();
-
-                if (pair.size() < 2) {
-                    continue;
+            // Handle first polygon of the geometry object as the Polygon, the second (if present) as the Hole
+            for (int i = 0; i < coordinateLists.size(); i++) {
+                QJsonArray coordList = coordinateLists[i].toArray();
+                QList<QGeoCoordinate> geoCoordinates;
+                for (const auto& coord : coordList) {
+                    QJsonArray point = coord.toArray();
+                    if (point.size() < 2) {
+                        continue;
+                    }
+                    double lon = point[0].toDouble();
+                    double lat = point[1].toDouble();
+                    geoCoordinates.append(QGeoCoordinate(lat, lon));
                 }
 
-                double lon = pair[0].toDouble();
-                double lat = pair[1].toDouble();
-
-                zone.polygon.append(QGeoCoordinate(lat, lon));
+                if (i == 0) {
+                    zone.polygon = geoCoordinates;
+                } else {
+                    zone.hole = geoCoordinates;
+                }
             }
 
             // Skip invalid polygons

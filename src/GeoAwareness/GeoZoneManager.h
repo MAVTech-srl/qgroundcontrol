@@ -49,6 +49,7 @@ private:
         QString type;
         QString name;
         QList<QGeoCoordinate> polygon;
+        QList<QGeoCoordinate> hole;
         double minAltitude = 0;
         double maxAltitude = 120;
         // Cached bounding box for future intersection tests
