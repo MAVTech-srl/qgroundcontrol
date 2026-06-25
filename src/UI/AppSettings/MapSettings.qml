@@ -226,9 +226,9 @@ Item {
                             title:          qsTr("Select Airspace File")
 
                             onAcceptedForLoad: (file) => {
-                                                airspaceFileTextField.text = file
-                                                _mapAirspaceJsonFilePath.value = airspaceFileTextField.text
-                                                //loadFromFile(airspaceFileTextField.text)
+                                airspaceFileTextField.text = file
+                                _mapAirspaceJsonFilePath.value = airspaceFileTextField.text
+                                QGroundControl.geoZoneManager.loadFromFile(airspaceFileTextField.text)
                             }
                         }
                     }
