@@ -78,10 +78,11 @@ private:
     class GeoZoneModel : public QAbstractListModel {
     public:
         enum Roles {
-            PathRole = Qt::UserRole + 1,
-            ColorRole,
-            MinAltRole,
-            MaxAltRole
+            PathRole   = Qt::UserRole + 1,
+            ColorRole  = Qt::UserRole + 2,
+            MinAltRole = Qt::UserRole + 3,
+            MaxAltRole = Qt::UserRole + 4,
+            HoleRole   = Qt::UserRole + 5
         };
 
         int rowCount(const QModelIndex& parent = QModelIndex()) const override {
@@ -105,6 +106,12 @@ private:
                 return z.minAltitude;
             case MaxAltRole:
                 return z.maxAltitude;
+            case HoleRole: {
+                QVariantList hole;
+                for (const auto& c : z.hole)
+                    hole << QVariant::fromValue(c);
+                return hole;
+            }
             }
 
             return {};
@@ -112,10 +119,11 @@ private:
 
         QHash<int, QByteArray> roleNames() const override {
             return {
-                {PathRole, "path"},
-                {ColorRole, "color"},
+                {PathRole,   "path"},
+                {ColorRole,  "color"},
                 {MinAltRole, "minAlt"},
-                {MaxAltRole, "maxAlt"}
+                {MaxAltRole, "maxAlt"},
+                {HoleRole,   "hole"}
             };
         }
 
@@ -137,5 +145,7 @@ private:
     GeoZoneModel _model;
     QList<GeoZone> _zones;
     int displayedZone = 0;
+    QList<int> _lastViewportZoneIndexes; // TODO: remove these unless really needed
+    bool _hasViewportZoneCache = false;
     RTree<int, double, 2> _zoneTree;
 };
