@@ -28,6 +28,7 @@
 #include "QGCGeoBoundingCube.h"
 #include "QGCMapPolygon.h"
 #include "QGCMapCircle.h"
+#include "GeoZoneOverlay.h"
 #include "MavlinkAction.h"
 #include "MavlinkActionManager.h"
 #include "EditPositionDialogController.h"
@@ -95,6 +96,7 @@ void QGroundControlQmlGlobal::registerQmlTypes()
     qmlRegisterType<ParameterEditorController>          ("QGroundControl.Controllers",           1, 0, "ParameterEditorController");
     qmlRegisterType<QGCFileDialogController>            ("QGroundControl.Controllers",           1, 0, "QGCFileDialogController");
     qmlRegisterType<QGCMapCircle>                       ("QGroundControl.FlightMap",             1, 0, "QGCMapCircle");
+    qmlRegisterType<GeoZoneOverlay>                     ("QGroundControl.FlightMap",             1, 0, "GeoZoneOverlay");
     qmlRegisterType<QGCMapPalette>                      ("QGroundControl.Palette",               1, 0, "QGCMapPalette");
     qmlRegisterType<QGCPalette>                         ("QGroundControl.Palette",               1, 0, "QGCPalette");
     qmlRegisterType<RCChannelMonitorController>         ("QGroundControl.Controllers",           1, 0, "RCChannelMonitorController");

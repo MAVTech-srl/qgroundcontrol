@@ -234,17 +234,11 @@ Map {
         }
     }
 
-    MapItemView {
+    // Geofence visuals
+    GeoZoneOverlay {
+        anchors.fill: parent
+        map: _map
         model: QGroundControl.geoZoneManager.model
-
-        delegate: MapPolygon {
-            path: model.path
-            color: model.color
-            opacity: 0.4
-
-            border.color: "transparent"
-            border.width: 0
-        }
     }
 
     onVisibleRegionChanged: {
