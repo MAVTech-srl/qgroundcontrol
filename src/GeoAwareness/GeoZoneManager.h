@@ -68,7 +68,7 @@ private:
         }
     };
 
-    Clipper2Lib::PathD geoZoneToClipperPath(const QList<QGeoCoordinate>& polygon);
+    Clipper2Lib::PathsD geoZoneToClipperPaths(const QList<QGeoCoordinate>& polygon, const QList<QGeoCoordinate>& hole = {});
     QList<QGeoCoordinate> clipperPathToGeoZone(const Clipper2Lib::PathD& path);
     void insertZoneIntoTree(GeoZone& zone, int index);
 

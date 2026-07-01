@@ -48,13 +48,36 @@ void GeoZoneManager::registerQmlTypes()
     (void) qmlRegisterUncreatableType<GeoZoneManager>("QGroundControl.GeoZoneManager", 1, 0, "GeoZoneManager", "Reference only");
 }
 
-Clipper2Lib::PathD GeoZoneManager::geoZoneToClipperPath(const QList<QGeoCoordinate>& polygon)
+Clipper2Lib::PathsD GeoZoneManager::geoZoneToClipperPaths(const QList<QGeoCoordinate>& polygon, const QList<QGeoCoordinate>& hole)
 {
-    Clipper2Lib::PathD result;
-    result.reserve(polygon.size());
+    Clipper2Lib::PathsD result;
+
+    Clipper2Lib::PathD outerPath;
+    outerPath.reserve(polygon.size());
     for (const QGeoCoordinate& coord : polygon) {
-        result.emplace_back(coord.longitude(), coord.latitude());
+        outerPath.emplace_back(coord.longitude(), coord.latitude());
     }
+
+    if (outerPath.size() >= 3) {
+        result.push_back(outerPath);
+    }
+
+    Clipper2Lib::PathD holePath;
+    holePath.reserve(hole.size());
+    for (const QGeoCoordinate& coord : hole) {
+        holePath.emplace_back(coord.longitude(), coord.latitude());
+    }
+
+    if (holePath.size() >= 3) {
+        if (!result.empty()) {
+            // Ensure hole has opposite winding from outer for NonZero fill rule.
+            if ((Clipper2Lib::Area<double>(result[0]) > 0) == (Clipper2Lib::Area<double>(holePath) > 0)) {
+                std::reverse(holePath.begin(), holePath.end());
+            }
+        }
+        result.push_back(holePath);
+    }
+
     return result;
 }
 
@@ -168,7 +191,7 @@ void GeoZoneManager::loadFromFile(const QString& path)
     Clipper2Lib::PathsD union_lower;
     QList<GeoZone> clippedZones;
     for (const GeoZone& zone : zones) {
-        Clipper2Lib::PathsD zone_paths = { geoZoneToClipperPath(zone.polygon) };
+        Clipper2Lib::PathsD zone_paths = geoZoneToClipperPaths(zone.polygon, zone.hole);
         Clipper2Lib::PathsD clipped = Clipper2Lib::Difference(zone_paths, union_lower, Clipper2Lib::FillRule::EvenOdd);
         if (!clipped.empty()) {
             GeoZone new_zone = zone;
@@ -255,7 +278,7 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
             continue;
         }
 
-        Clipper2Lib::PathsD clippedPaths = { geoZoneToClipperPath(_zones[i].polygon) };
+        Clipper2Lib::PathsD clippedPaths = geoZoneToClipperPaths(_zones[i].polygon, _zones[i].hole);
         bool hasOverlapClipping = false;*/
 
         // Find indexes of intersecting zones
@@ -266,64 +289,94 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
         });
         qDebug() << "-------- About to check intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") and " << intersectingZoneNumber << " other zones in the viewport";
 
-        Clipper2Lib::PathsD currentPath = { geoZoneToClipperPath(_zones[i].polygon) };
+        Clipper2Lib::PathsD currentPath = geoZoneToClipperPaths(_zones[i].polygon, _zones[i].hole);
+        if (currentPath.empty()) {
+            continue;
+        }
+
         Clipper2Lib::ClipperD clipper(GEOZONE_CLIPPER_PRECISION);
         clipper.AddSubject(currentPath);
+        bool hasClipPaths = false;
         for (int j : intersectingIndexes) {
             // Only clip current zone intersections with OTHER zones of equal or higher priority (lower minAltitude)
             if (i == j || _zones[i].minAltitude < _zones[j].minAltitude) {
                 //qDebug() << "Skipping zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << ")";
                 continue;
             }
-            qDebug() << "Checking intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << "m) and zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << "m)";
 
-            Clipper2Lib::PathsD intersectingPath = { geoZoneToClipperPath(_zones[j].polygon) };
+            Clipper2Lib::PathsD intersectingPath = geoZoneToClipperPaths(_zones[j].polygon, _zones[j].hole);
+            if (intersectingPath.empty()) {
+                continue;
+            }
+
+            qDebug() << "Checking intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << "m) and zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << "m)";
             clipper.AddClip(intersectingPath);
+            hasClipPaths = true;
             //currentPath = Clipper2Lib::Difference(currentPath, {intersectingPath}, Clipper2Lib::FillRule::NonZero, GEOZONE_CLIPPER_PRECISION);
 
             //qDebug() << "After clipping with zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << "), subject size: " << currentPath.size();
+        }
+
+        // If no valid clip zone was added, clipping must be skipped to preserve the subject geometry.
+        if (!hasClipPaths) {
+            _zones[i].alreadyClipped = true;
+            continue;
         }
 
         // Clip the subject (zone[i]) against all intersecting zones (zone[j]) at once, storing the result in a PolyTreeD structure
         Clipper2Lib::PolyTreeD polyTree;
         clipper.Execute(Clipper2Lib::ClipType::Difference, Clipper2Lib::FillRule::NonZero, polyTree);
 
-        // Extract the clipped subject's path and hole (if present) from the PolyTreeD and store it back in the zone's polygon and hole
-        /*Clipper2Lib::PolyPathDList::const_iterator ppi, ppi2;
-        for (ppi = polyTree.begin(); ppi != polyTree.end(); ++ppi) {
-            for (ppi2 = (*ppi)->begin(); ppi2 != (*ppi)->end(); ++ppi2) {
-                const std::unique_ptr<Clipper2Lib::PolyPathD>& hole = *ppi2;
-                if (!hole->IsHole() || hole->Level() != 2) {
-                    std::cout << "oops!";
+        const double oldMin[2] = { _zones[i].minLonLat[0], _zones[i].minLonLat[1] };
+        const double oldMax[2] = { _zones[i].maxLonLat[0], _zones[i].maxLonLat[1] };
+
+        // Split top-level clipped contours into separate GeoZones (same metadata as subject zone).
+        QList<GeoZone> splitZones;
+        for (auto outerIterator = polyTree.begin(); outerIterator != polyTree.end(); outerIterator++) {
+            const Clipper2Lib::PolyPathD* outer = outerIterator->get();
+            if (outer->IsHole() || outer->Polygon().size() < 3) {
+                continue;
+            }
+
+            GeoZone splitZone = _zones[i];
+            splitZone.polygon = clipperPathToGeoZone(outer->Polygon());
+            splitZone.hole.clear();
+
+            for (auto holeIterator = outer->begin(); holeIterator != outer->end(); holeIterator++) {
+                const Clipper2Lib::PolyPathD* hole = holeIterator->get();
+                if (!hole->IsHole() || hole->Polygon().size() < 3) {
+                    continue;
                 }
+
+                // GeoZone currently stores a single hole ring. Keep the first valid hole.
+                splitZone.hole = clipperPathToGeoZone(hole->Polygon());
+                break;
             }
-        }*/
-        for (auto outerIt = polyTree.begin(); outerIt != polyTree.end(); outerIt++) {
-            const Clipper2Lib::PolyPathD* outer = outerIt->get();
-            if (outer->IsHole()) {
-                continue; // unexpected at level 1, but safe guard
-            }
-        
-            // outer->Polygon() is the clipped contour for one connected piece
-            Clipper2Lib::PathD outerPath = outer->Polygon();
-            Clipper2Lib::PathsD holes;
-            for (auto holeIt = outer->begin(); holeIt != outer->end(); holeIt++) {
-                const Clipper2Lib::PolyPathD* hole = holeIt->get();
-                if (!hole->IsHole()) {
-                    continue; // could be deeper/nested oddity
-                }
-                holes.push_back(hole->Polygon());
-            }
-        
-            // map {outerPath, holes} into your GeoZone
-            _zones[i].polygon = clipperPathToGeoZone(outerPath);
-            if (!holes.empty()) {
-                _zones[i].hole = clipperPathToGeoZone(holes[0]); // assuming one hole for now
-            } else {
-                _zones[i].hole.clear();
+
+            splitZones.append(splitZone);
+        }
+
+        if (splitZones.isEmpty()) {
+            _zoneTree.Remove(oldMin, oldMax, i);
+            _zones[i].polygon.clear();
+            _zones[i].hole.clear();
+        } else {
+            // Keep first split in original slot.
+            _zoneTree.Remove(oldMin, oldMax, i);
+            _zones[i].polygon = splitZones.first().polygon;
+            _zones[i].hole = splitZones.first().hole;
+            insertZoneIntoTree(_zones[i], i);
+
+            // Additional splits become new zones with same id/name/type/altitudes.
+            for (int splitIndex = 1; splitIndex < splitZones.size(); ++splitIndex) {
+                GeoZone newSplitZone = splitZones[splitIndex];
+                newSplitZone.alreadyClipped = true;
+                _zones.append(newSplitZone);
+                insertZoneIntoTree(_zones.last(), _zones.size() - 1);
             }
         }
-        qDebug() << "After PolyTreeD clipping zone " << _zones[i].name << " with all intersecting zones, resulting path size: " << _zones[i].polygon.size();
+
+        qDebug() << "After PolyTreeD clipping zone " << _zones[i].name << " resulting split zones:" << splitZones.size();
 
         _zones[i].alreadyClipped = true;
         //qDebug() << "Set zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") as clipped by higher priority zones, final polygon points: " << _zones[i].polygon.size();
