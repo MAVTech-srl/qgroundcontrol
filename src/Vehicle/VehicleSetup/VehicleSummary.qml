@@ -68,7 +68,7 @@ Rectangle {
                         implicitHeight: mainLayout.implicitHeight + (_margins * 2)
                         radius: ScreenTools.defaultFontPixelHeight / 4
                         color: qgcPal.windowShade
-                        visible: modelData.summaryQmlSource.toString() !== ""
+                        visible: setupView._componentAllowed(modelData) && modelData.summaryQmlSource.toString() !== ""
                         border.width: 1
                         border.color: Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.1)
 
@@ -115,7 +115,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: item ? item.implicitWidth : 0
                                 Layout.preferredHeight: item ? item.implicitHeight : 0
-                                source: modelData.summaryQmlSource
+                                source: setupView._componentAllowed(modelData) ? modelData.summaryQmlSource : ""
 
                                 property var vehicleComponent: modelData
                             }
