@@ -91,6 +91,16 @@ Rectangle {
         }
     }
 
+    function _isLimitedSetupComponent(vehicleComponent) {
+        var source = vehicleComponent.setupSource.toString()
+        return source.indexOf("SensorsComponent.qml") !== -1 ||
+               source.indexOf("APMSensorsComponent.qml") !== -1 ||
+               source.indexOf("RadioComponent.qml") !== -1 ||
+               source.indexOf("SafetyComponent.qml") !== -1 ||
+               source.indexOf("APMSafetyComponent.qml") !== -1 ||
+               source.indexOf("APMSafetyComponentSub.qml") !== -1
+    }
+
     Component.onCompleted: _showSummaryPanel()
 
     Connections {
@@ -210,13 +220,13 @@ Rectangle {
 
             Repeater {
                 model:                  _corePlugin ? _corePlugin.settingsPages : []
-                visible:                _corePlugin && _corePlugin.options.combineSettingsAndSetup
+                visible:                _corePlugin && _corePlugin.options.combineSettingsAndSetup && _corePlugin.showAdvancedUI
                 SubMenuButton {
                     imageResource:      modelData.icon
                     setupIndicator:     false
                     exclusiveGroup:     setupButtonGroup
                     text:               modelData.title
-                    visible:            _corePlugin && _corePlugin.options.combineSettingsAndSetup
+                    visible:            _corePlugin && _corePlugin.options.combineSettingsAndSetup && _corePlugin.showAdvancedUI
                     onClicked:          showPanel(this, modelData.url)
                     Layout.fillWidth:   true
                 }
@@ -249,7 +259,7 @@ Rectangle {
             SubMenuButton {
                 id:                 px4FlowButton
                 exclusiveGroup:     setupButtonGroup
-                visible:            QGroundControl.multiVehicleManager.activeVehicle ? QGroundControl.multiVehicleManager.activeVehicle.vehicleLinkManager.primaryLinkIsPX4Flow : false
+                visible:            _corePlugin.showAdvancedUI && (QGroundControl.multiVehicleManager.activeVehicle ? QGroundControl.multiVehicleManager.activeVehicle.vehicleLinkManager.primaryLinkIsPX4Flow : false)
                 setupIndicator:     false
                 text:               qsTr("PX4Flow")
                 Layout.fillWidth:   true
@@ -262,7 +272,7 @@ Rectangle {
                 setupIndicator:     true
                 setupComplete:      _activeJoystick ? _activeJoystick.calibrated || _buttonsOnly : false
                 exclusiveGroup:     setupButtonGroup
-                visible:            _fullParameterVehicleAvailable && joystickManager.joysticks.length !== 0
+                visible:            _corePlugin.showAdvancedUI && _fullParameterVehicleAvailable && joystickManager.joysticks.length !== 0
                 text:               _forcedToButtonsOnly ? qsTr("Buttons") : qsTr("Joystick")
                 Layout.fillWidth:   true
                 onClicked:          showPanel(this, "JoystickConfig.qml")
@@ -282,7 +292,7 @@ Rectangle {
                     setupComplete:      modelData.setupComplete
                     exclusiveGroup:     setupButtonGroup
                     text:               modelData.name
-                    visible:            modelData.setupSource.toString() !== ""
+                    visible:            modelData.setupSource.toString() !== "" && (_corePlugin.showAdvancedUI || _isLimitedSetupComponent(modelData))
                     Layout.fillWidth:   true
                     onClicked:          showVehicleComponentPanel(modelData)
                 }

@@ -40,6 +40,10 @@ Rectangle {
         id: logController
     }
 
+    function _isLimitedAnalyzePage(page) {
+        return page.url.toString().indexOf("LogDownloadPage.qml") !== -1
+    }
+
     QGCFlickable {
         id:                 buttonScroll
         width:              buttonColumn.width
@@ -89,6 +93,7 @@ Rectangle {
                     setupIndicator:     false
                     exclusiveGroup:     setupButtonGroup
                     text:               modelData.title
+                    visible:            QGroundControl.corePlugin.showAdvancedUI || _isLimitedAnalyzePage(modelData)
 
                     onClicked: {
                         panelLoader.source  = modelData.url

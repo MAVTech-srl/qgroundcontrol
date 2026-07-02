@@ -319,7 +319,6 @@ ApplicationWindow {
                         text:               qsTr("Analyze Tools")
                         imageResource:      "/qmlimages/Analyze.svg"
                         imageColor:         qgcPal.text
-                        visible:            QGroundControl.corePlugin.showAdvancedUI
                         onClicked: {
                             if (!mainWindow.preventViewSwitch()) {
                                 toolSelectDialog.close()
