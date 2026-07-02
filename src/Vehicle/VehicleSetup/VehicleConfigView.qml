@@ -129,8 +129,27 @@ Rectangle {
         return false
     }
 
+    function _isAdvancedOnlyComponent(component) {
+        if (!component) {
+            return false
+        }
+
+        var source = component.setupSource.toString()
+        return source.indexOf("ActuatorComponent.qml") !== -1 ||
+               source.indexOf("AirframeComponent.qml") !== -1 ||
+               source.indexOf("FlightBehavior") !== -1 ||
+               source.indexOf("FlightModes") !== -1 ||
+               source.indexOf("JoystickComponent.qml") !== -1 ||
+               source.indexOf("TuningComponent") !== -1 ||
+               source.indexOf("PowerComponent.qml") !== -1
+    }
+
+    function _componentAllowed(component) {
+        return component && (!_isAdvancedOnlyComponent(component) || _corePlugin.showAdvancedUI)
+    }
+
     function _componentVisible(component) {
-        if (!component || component.setupSource.toString() === "") {
+        if (!_componentAllowed(component) || component.setupSource.toString() === "") {
             return false
         }
         return _searchQuery.trim() === "" || _componentMatchesSearch(component)
@@ -182,6 +201,10 @@ Rectangle {
         var components = _activeVehicle.autopilotPlugin.vehicleComponents
         if (compIndex < 0 || compIndex >= components.length) return
         var vehicleComponent = components[compIndex]
+        if (!_componentAllowed(vehicleComponent)) {
+            _showSummaryPanel()
+            return
+        }
 
         _selectedSpecial = ""
 

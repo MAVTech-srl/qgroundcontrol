@@ -50,7 +50,6 @@ ToolIndicatorPage {
                 Layout.fillWidth: true
                 text: qsTr("Analyze")
                 imageResource: "/qmlimages/Analyze.svg"
-                visible: QGroundControl.corePlugin.showAdvancedUI
                 onClicked: {
                     if (mainWindow.allowViewSwitch()) {
                         mainWindow.closeIndicatorDrawer()

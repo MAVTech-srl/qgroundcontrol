@@ -235,7 +235,7 @@ signals:
 
 protected:
     bool _showTouchAreas = false;
-    bool _showAdvancedUI = true;
+    bool _showAdvancedUI = false;
 
 private:
     void _setShowTouchAreas(bool show);

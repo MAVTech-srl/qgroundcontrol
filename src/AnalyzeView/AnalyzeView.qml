@@ -61,6 +61,31 @@ Rectangle {
         anchors.fill: parent
     }
 
+    function _selectDefaultPage() {
+        var pages = QGroundControl.corePlugin ? QGroundControl.corePlugin.analyzePages : []
+        for (var i = 0; i < pages.length; i++) {
+            if (QGroundControl.corePlugin.showAdvancedUI || _isLimitedAnalyzePage(pages[i])) {
+                _currentPage = pages[i]
+                panelContainer.title = _currentPage.title
+                _updatePanelSource()
+                return
+            }
+        }
+    }
+
+    function _isLimitedAnalyzePage(page) {
+        return page.url.toString().indexOf("OnboardLogPage.qml") !== -1
+    }
+
+    Connections {
+        target: QGroundControl.corePlugin
+        function onShowAdvancedUIChanged(showAdvancedUI) {
+            if (!showAdvancedUI) {
+                _selectDefaultPage()
+            }
+        }
+    }
+
     QGCFlickable {
         id:                 buttonScroll
         width:              buttonColumn.width
@@ -92,11 +117,7 @@ Rectangle {
                 model:  QGroundControl.corePlugin ? QGroundControl.corePlugin.analyzePages : []
 
                 Component.onCompleted: {
-                    if (count > 0) {
-                        _currentPage = QGroundControl.corePlugin.analyzePages[0]
-                        panelContainer.title = _currentPage.title
-                        _updatePanelSource()
-                    }
+                    _selectDefaultPage()
                 }
 
                 SubMenuButton {
@@ -105,6 +126,7 @@ Rectangle {
                     text:               modelData.title
                     width:              buttonColumn._maxButtonWidth
                     checked:            _currentPage === modelData
+                    visible:            QGroundControl.corePlugin.showAdvancedUI || _isLimitedAnalyzePage(modelData)
 
                     onClicked: {
                         if (!mainWindow.allowViewSwitch()) {
