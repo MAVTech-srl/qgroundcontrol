@@ -59,6 +59,10 @@ Clipper2Lib::PathsD GeoZoneManager::geoZoneToClipperPaths(const QList<QGeoCoordi
     }
 
     if (outerPath.size() >= 3) {
+        // Normalize all outer rings to the same winding to prevent NonZero cancellation across independent overlapping zones.
+        if (Clipper2Lib::Area<double>(outerPath) <= 0) {
+            std::reverse(outerPath.begin(), outerPath.end());
+        }
         result.push_back(outerPath);
     }
 
@@ -234,10 +238,6 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
     double min[2] = { leftLon, bottomLat };
     double max[2] = { rightLon, topLat };
 
-    /*
-     * TODO: for every GeoZone in the viewport, find any polygon intersecting with it and cut them depending on priority, then flag the afflicted zone so that it is not re-handled another time.
-     * Consider caching clipped zones into a refined R-Tree for following QGC launches.
-     */
     QString resultsString = "";
     QList<int> viewportZoneIndexes; // TODO: fill this variable
     int results = _zoneTree.Search(min, max, [this, &viewportZoneIndexes, &resultsString](const int& index) {
@@ -247,7 +247,7 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
         //qDebug() << "Found zone in viewport: idx " << index << ", Name: " << _zones[index].name << "), minAlt: " << _zones[index].minAltitude << ", polygon points: " << _zones[index].polygon.size();
         return true; // continue searching
     });
-    qDebug() << "Zones in viewport " << results << ": " << resultsString << ")";
+    //qDebug() << "Zones in viewport " << results << ": " << resultsString << ")";
 
     /*std::sort(viewportZoneIndexes.begin(), viewportZoneIndexes.end());
 
@@ -287,7 +287,7 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
             intersectingIndexes.push_back(index);
             return true; // continue searching
         });
-        qDebug() << "-------- About to check intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") and " << intersectingZoneNumber << " other zones in the viewport";
+        qDebug() << "---- About to check intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") and " << intersectingZoneNumber << " other zones in the viewport";
 
         Clipper2Lib::PathsD currentPath = geoZoneToClipperPaths(_zones[i].polygon, _zones[i].hole);
         if (currentPath.empty()) {
@@ -309,12 +309,9 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
                 continue;
             }
 
-            qDebug() << "Checking intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << "m) and zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << "m)";
+            qDebug() << "Going to clip zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << "m) with zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << "m)";
             clipper.AddClip(intersectingPath);
             hasClipPaths = true;
-            //currentPath = Clipper2Lib::Difference(currentPath, {intersectingPath}, Clipper2Lib::FillRule::NonZero, GEOZONE_CLIPPER_PRECISION);
-
-            //qDebug() << "After clipping with zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << "), subject size: " << currentPath.size();
         }
 
         // If no valid clip zone was added, clipping must be skipped to preserve the subject geometry.
@@ -368,7 +365,7 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
             insertZoneIntoTree(_zones[i], i);
 
             // Additional splits become new zones with same id/name/type/altitudes.
-            for (int splitIndex = 1; splitIndex < splitZones.size(); ++splitIndex) {
+            for (int splitIndex = 1; splitIndex < splitZones.size(); splitIndex++) {
                 GeoZone newSplitZone = splitZones[splitIndex];
                 newSplitZone.alreadyClipped = true;
                 _zones.append(newSplitZone);
