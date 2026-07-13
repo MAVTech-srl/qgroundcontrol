@@ -49,7 +49,7 @@ private:
         QString type;
         QString name;
         QList<QGeoCoordinate> polygon;
-        QList<QGeoCoordinate> hole;
+        QList<QList<QGeoCoordinate>> holes;
         double minAltitude = 0;
         double maxAltitude = 120;
         // Cached bounding box for future intersection tests
@@ -68,7 +68,7 @@ private:
         }
     };
 
-    Clipper2Lib::PathsD geoZoneToClipperPaths(const QList<QGeoCoordinate>& polygon, const QList<QGeoCoordinate>& hole = {});
+    Clipper2Lib::PathsD geoZoneToClipperPaths(const QList<QGeoCoordinate>& polygon, const QList<QList<QGeoCoordinate>>& holes = {});
     QList<QGeoCoordinate> clipperPathToGeoZone(const Clipper2Lib::PathD& path);
     void insertZoneIntoTree(GeoZone& zone, int index);
 
@@ -107,10 +107,15 @@ private:
             case MaxAltRole:
                 return z.maxAltitude;
             case HoleRole: {
-                QVariantList hole;
-                for (const auto& c : z.hole)
-                    hole << QVariant::fromValue(c);
-                return hole;
+                QVariantList holes;
+                for (const QList<QGeoCoordinate>& holeRing : z.holes) {
+                    QVariantList ring;
+                    for (const auto& c : holeRing) {
+                        ring << QVariant::fromValue(c);
+                    }
+                    holes.append(QVariant(ring));
+                }
+                return holes;
             }
             }
 

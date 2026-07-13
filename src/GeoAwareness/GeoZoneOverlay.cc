@@ -181,15 +181,20 @@ void GeoZoneOverlay::paint(QPainter* painter)
             continue;
         }
 
-        // Hole ring (if present) — OddEvenFill will subtract it
-        const QVariantList holeList = index.data(Qt::UserRole + 5).toList(); // HoleRole
-        if (!holeList.isEmpty()) {
-            bool firstHole = true;
-            for (const QVariant& coordVar : holeList) {
+        // Hole rings (if present) — each child ring is its own subpath
+        const QVariantList holeRings = index.data(Qt::UserRole + 5).toList(); // HoleRole
+        for (const QVariant& ringVar : holeRings) {
+            const QVariantList ring = ringVar.toList();
+            if (ring.size() < 3) {
+                continue;
+            }
+
+            bool firstHolePoint = true;
+            for (const QVariant& coordVar : ring) {
                 QPointF screenPoint = mapPointForCoordinate(coordVar.value<QGeoCoordinate>());
-                if (firstHole) {
+                if (firstHolePoint) {
                     polygonPath.moveTo(screenPoint);
-                    firstHole = false;
+                    firstHolePoint = false;
                 } else {
                     polygonPath.lineTo(screenPoint);
                 }
