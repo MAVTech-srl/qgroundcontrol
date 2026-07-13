@@ -48,7 +48,7 @@ void GeoZoneManager::registerQmlTypes()
     (void) qmlRegisterUncreatableType<GeoZoneManager>("QGroundControl.GeoZoneManager", 1, 0, "GeoZoneManager", "Reference only");
 }
 
-Clipper2Lib::PathsD GeoZoneManager::geoZoneToClipperPaths(const QList<QGeoCoordinate>& polygon, const QList<QGeoCoordinate>& hole)
+Clipper2Lib::PathsD GeoZoneManager::geoZoneToClipperPaths(const QList<QGeoCoordinate>& polygon, const QList<QList<QGeoCoordinate>>& holes)
 {
     Clipper2Lib::PathsD result;
 
@@ -65,20 +65,23 @@ Clipper2Lib::PathsD GeoZoneManager::geoZoneToClipperPaths(const QList<QGeoCoordi
         }
         result.push_back(outerPath);
     }
-
-    Clipper2Lib::PathD holePath;
-    holePath.reserve(hole.size());
-    for (const QGeoCoordinate& coord : hole) {
-        holePath.emplace_back(coord.longitude(), coord.latitude());
-    }
-
-    if (holePath.size() >= 3) {
-        if (!result.empty()) {
-            // Ensure hole has opposite winding from outer for NonZero fill rule.
-            if ((Clipper2Lib::Area<double>(result[0]) > 0) == (Clipper2Lib::Area<double>(holePath) > 0)) {
-                std::reverse(holePath.begin(), holePath.end());
-            }
+    
+    for (const QList<QGeoCoordinate>& hole : holes) {
+        Clipper2Lib::PathD holePath;
+        holePath.reserve(hole.size());
+        for (const QGeoCoordinate& coord : hole) {
+            holePath.emplace_back(coord.longitude(), coord.latitude());
         }
+
+        if (holePath.size() < 3 || result.empty()) {
+            continue;
+        }
+
+        // Ensure each hole has opposite winding from outer for NonZero fill rule.
+        if ((Clipper2Lib::Area<double>(result[0]) > 0) == (Clipper2Lib::Area<double>(holePath) > 0)) {
+            std::reverse(holePath.begin(), holePath.end());
+        }
+
         result.push_back(holePath);
     }
 
@@ -100,8 +103,6 @@ void GeoZoneManager::loadFromFile(const QString& path)
     // Clear existing zones
     _model.setZones({});
     _zoneTree.RemoveAll();
-    /*_lastViewportZoneIndexes.clear();
-    _hasViewportZoneCache = false;*/
 
     // Load file
     QFile file(path);
@@ -168,7 +169,7 @@ void GeoZoneManager::loadFromFile(const QString& path)
                 if (i == 0) {
                     zone.polygon = geoCoordinates;
                 } else {
-                    zone.hole = geoCoordinates;
+                    zone.holes.append(geoCoordinates);
                 }
             }
 
@@ -183,31 +184,8 @@ void GeoZoneManager::loadFromFile(const QString& path)
         }
     }
 
-    // Sort and intersect zones with R-Tree
-
-    // Sort zones by minAltitude ascending
-    /*std::sort(zones.begin(), zones.end(), [](const GeoZone& a, const GeoZone& b) {
-        return a.minAltitude < b.minAltitude;
-    });
-    qDebug() << "Sorted GeoZones by minAltitude";
-
-    // Clip zones based on altitude layers
-    Clipper2Lib::PathsD union_lower;
-    QList<GeoZone> clippedZones;
-    for (const GeoZone& zone : zones) {
-        Clipper2Lib::PathsD zone_paths = geoZoneToClipperPaths(zone.polygon, zone.hole);
-        Clipper2Lib::PathsD clipped = Clipper2Lib::Difference(zone_paths, union_lower, Clipper2Lib::FillRule::EvenOdd);
-        if (!clipped.empty()) {
-            GeoZone new_zone = zone;
-            new_zone.polygon = clipperPathToGeoZone(clipped[0]);  // Assuming one path
-            clippedZones.append(new_zone);
-            union_lower = Clipper2Lib::Union(union_lower, clipped, Clipper2Lib::FillRule::EvenOdd);
-        }
-    }
-    zones = clippedZones;
-
     // Rebuild R-tree with clipped zones
-    _zoneTree.RemoveAll();
+    /*_zoneTree.RemoveAll();
     for (int i = 0; i < zones.size(); ++i) {
         insertZoneIntoTree(zones[i], i);
     }*/
@@ -239,7 +217,8 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
     double max[2] = { rightLon, topLat };
 
     QString resultsString = "";
-    QList<int> viewportZoneIndexes; // TODO: fill this variable
+    QList<int> viewportZoneIndexes;
+    // Find all zones within the viewport bounding box
     int results = _zoneTree.Search(min, max, [this, &viewportZoneIndexes, &resultsString](const int& index) {
         viewportZoneIndexes.push_back(index);
         // Debug
@@ -248,23 +227,6 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
         return true; // continue searching
     });
     //qDebug() << "Zones in viewport " << results << ": " << resultsString << ")";
-
-    /*std::sort(viewportZoneIndexes.begin(), viewportZoneIndexes.end());
-
-    // Cache hit: visible zone set unchanged, so clipped output is unchanged too.
-    if (_hasViewportZoneCache && (viewportZoneIndexes == _lastViewportZoneIndexes)) {
-        return;
-    }
-
-    if (viewportZoneIndexes.isEmpty()) {
-        _lastViewportZoneIndexes = viewportZoneIndexes;
-        _hasViewportZoneCache = true;
-        _model.setZones({});
-        return;
-    }
-
-    QList<GeoZone> clippedViewportZones;
-    clippedViewportZones.reserve(viewportZoneIndexes.size());*/
 
     // Go through each zone's nearby intersecting zones and clip them based on altitude layers
     for (int i : viewportZoneIndexes) {
@@ -289,7 +251,7 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
         });
         qDebug() << "---- About to check intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") and " << intersectingZoneNumber << " other zones in the viewport";
 
-        Clipper2Lib::PathsD currentPath = geoZoneToClipperPaths(_zones[i].polygon, _zones[i].hole);
+        Clipper2Lib::PathsD currentPath = geoZoneToClipperPaths(_zones[i].polygon, _zones[i].holes);
         if (currentPath.empty()) {
             continue;
         }
@@ -304,7 +266,7 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
                 continue;
             }
 
-            Clipper2Lib::PathsD intersectingPath = geoZoneToClipperPaths(_zones[j].polygon, _zones[j].hole);
+            Clipper2Lib::PathsD intersectingPath = geoZoneToClipperPaths(_zones[j].polygon, _zones[j].holes);
             if (intersectingPath.empty()) {
                 continue;
             }
@@ -337,7 +299,7 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
 
             GeoZone splitZone = _zones[i];
             splitZone.polygon = clipperPathToGeoZone(outer->Polygon());
-            splitZone.hole.clear();
+            splitZone.holes.clear();
 
             for (auto holeIterator = outer->begin(); holeIterator != outer->end(); holeIterator++) {
                 const Clipper2Lib::PolyPathD* hole = holeIterator->get();
@@ -345,23 +307,21 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
                     continue;
                 }
 
-                // GeoZone currently stores a single hole ring. Keep the first valid hole.
-                splitZone.hole = clipperPathToGeoZone(hole->Polygon());
-                break;
+                splitZone.holes.append(clipperPathToGeoZone(hole->Polygon()));
             }
 
             splitZones.append(splitZone);
         }
 
+        _zoneTree.Remove(oldMin, oldMax, i);
         if (splitZones.isEmpty()) {
-            _zoneTree.Remove(oldMin, oldMax, i);
+            // Remove the original zone if it was completely clipped away
             _zones[i].polygon.clear();
-            _zones[i].hole.clear();
+            _zones[i].holes.clear();
         } else {
             // Keep first split in original slot.
-            _zoneTree.Remove(oldMin, oldMax, i);
             _zones[i].polygon = splitZones.first().polygon;
-            _zones[i].hole = splitZones.first().hole;
+            _zones[i].holes = splitZones.first().holes;
             insertZoneIntoTree(_zones[i], i);
 
             // Additional splits become new zones with same id/name/type/altitudes.
@@ -377,7 +337,7 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
 
         _zones[i].alreadyClipped = true;
         //qDebug() << "Set zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") as clipped by higher priority zones, final polygon points: " << _zones[i].polygon.size();
-        break; // TODO: remove this break to handle all zones in the viewport
+        //break; // TODO: remove this break to handle all zones in the viewport
     }
 
     // Update model with clipped zones in the viewport
