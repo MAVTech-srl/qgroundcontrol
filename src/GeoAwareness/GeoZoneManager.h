@@ -33,12 +33,7 @@ public:
     QAbstractListModel* model();
 
     Q_INVOKABLE void loadFromFile(const QString& path);
-    Q_INVOKABLE void updateViewport(
-        double topLat,
-        double leftLon,
-        double bottomLat,
-        double rightLon
-    );
+    Q_INVOKABLE void clipAllZones();
 
 private:
     // -----------------------------
