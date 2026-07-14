@@ -203,36 +203,19 @@ void GeoZoneManager::loadFromFile(const QString& path)
             << aabb.m_max[2];
     }*/
 
-    qDebug() << "Loaded GeoZones: " << zones.size();
+    qDebug() << "Parsed " << zones.size() << " GeoZones";
+
+    _zones = zones; // Store zones for later viewport queries
 
     _model.setZones(zones);
-    _zones = zones; // Store zones for later viewport queries
 }
 
 //#define CLIPPING_DEBUG_LOGS
-void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottomLat, double rightLon)
+void GeoZoneManager::clipAllZones()
 {
-    qDebug() << "Updating viewport: " << topLat << leftLon << bottomLat << rightLon;
-    // Query R-tree for zones intersecting the viewport
-    double min[2] = { leftLon, bottomLat };
-    double max[2] = { rightLon, topLat };
-
-    QString resultsString = "";
-    QList<int> viewportZoneIndexes;
-    // Find all zones within the viewport bounding box
-    int results = _zoneTree.Search(min, max, [this, &viewportZoneIndexes, &resultsString](const int& index) {
-        viewportZoneIndexes.push_back(index);
-        // Debug
-        resultsString += QString::number(index) + " (" + _zones[index].name + /*", minLonLat: " + QString::number(_zones[index].minLonLat[0]) + "|" + QString::number(_zones[index].minLonLat[1]) + ", maxLonLat: " + QString::number(_zones[index].maxLonLat[0]) + "|" + QString::number(_zones[index].maxLonLat[1]) +*/ "), ";
-        //qDebug() << "Found zone in viewport: idx " << index << ", Name: " << _zones[index].name << "), minAlt: " << _zones[index].minAltitude << ", polygon points: " << _zones[index].polygon.size();
-        return true; // continue searching
-    });
-    #ifdef CLIPPING_DEBUG_LOGS
-    //qDebug() << "Zones in viewport " << results << ": " << resultsString << ")";
-    #endif
-
-    // Go through each zone's nearby intersecting zones and clip them based on altitude layers
-    for (int i : viewportZoneIndexes) {
+    qDebug() << "Clipping all Zones.";
+    // Iterate through all zones and clip them based on altitude layers
+    for (int i = 0; i < _zones.size(); i++) {
         // Skip already clipped zones
         if (_zones[i].alreadyClipped) {
             #ifdef CLIPPING_DEBUG_LOGS
@@ -353,16 +336,9 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
         //break; // TODO: remove this break to handle all zones in the viewport
     }
 
-    // Update model with clipped zones in the viewport
     _model.setZones(_zones);
 
-    qDebug() << "Finished clipping zones in new viewport.";
-
-    // For demo purposes, just display one of the zones in the viewport (cycling through them on each update)
-    /*if (++displayedZone >= _zones.size())
-        displayedZone = 0;
-    _model.setZones({_zones[displayedZone]});
-    qDebug() << "Displaying zone Index: " << displayedZone << ", Name: " << _zones[displayedZone].name;*/
+    qDebug() << "Finished clipping all zones.";
 }
 
 void GeoZoneManager::insertZoneIntoTree(GeoZone& zone, int index)
