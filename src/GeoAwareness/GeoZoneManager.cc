@@ -209,6 +209,7 @@ void GeoZoneManager::loadFromFile(const QString& path)
     _zones = zones; // Store zones for later viewport queries
 }
 
+//#define CLIPPING_DEBUG_LOGS
 void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottomLat, double rightLon)
 {
     qDebug() << "Updating viewport: " << topLat << leftLon << bottomLat << rightLon;
@@ -226,13 +227,17 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
         //qDebug() << "Found zone in viewport: idx " << index << ", Name: " << _zones[index].name << "), minAlt: " << _zones[index].minAltitude << ", polygon points: " << _zones[index].polygon.size();
         return true; // continue searching
     });
+    #ifdef CLIPPING_DEBUG_LOGS
     //qDebug() << "Zones in viewport " << results << ": " << resultsString << ")";
+    #endif
 
     // Go through each zone's nearby intersecting zones and clip them based on altitude layers
     for (int i : viewportZoneIndexes) {
         // Skip already clipped zones
         if (_zones[i].alreadyClipped) {
+            #ifdef CLIPPING_DEBUG_LOGS
             qDebug() << "Skipping zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") because it has already been clipped by higher priority zones";
+            #endif
             continue;
         }
 
@@ -249,7 +254,9 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
             intersectingIndexes.push_back(index);
             return true; // continue searching
         });
+        #ifdef CLIPPING_DEBUG_LOGS
         qDebug() << "---- About to check intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") and " << intersectingZoneNumber << " other zones in the viewport";
+        #endif
 
         Clipper2Lib::PathsD currentPath = geoZoneToClipperPaths(_zones[i].polygon, _zones[i].holes);
         if (currentPath.empty()) {
@@ -262,7 +269,9 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
         for (int j : intersectingIndexes) {
             // Only clip current zone intersections with OTHER zones of equal or higher priority (lower minAltitude)
             if (i == j || _zones[i].minAltitude < _zones[j].minAltitude) {
+                #ifdef CLIPPING_DEBUG_LOGS
                 //qDebug() << "Skipping zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << ")";
+                #endif
                 continue;
             }
 
@@ -271,7 +280,9 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
                 continue;
             }
 
+            #ifdef CLIPPING_DEBUG_LOGS
             qDebug() << "Going to clip zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << "m) with zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << "m)";
+            #endif
             clipper.AddClip(intersectingPath);
             hasClipPaths = true;
         }
@@ -333,7 +344,9 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
             }
         }
 
+        #ifdef CLIPPING_DEBUG_LOGS
         qDebug() << "After PolyTreeD clipping zone " << _zones[i].name << " resulting split zones:" << splitZones.size();
+        #endif
 
         _zones[i].alreadyClipped = true;
         //qDebug() << "Set zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") as clipped by higher priority zones, final polygon points: " << _zones[i].polygon.size();
@@ -342,6 +355,8 @@ void GeoZoneManager::updateViewport(double topLat, double leftLon, double bottom
 
     // Update model with clipped zones in the viewport
     _model.setZones(_zones);
+
+    qDebug() << "Finished clipping zones in new viewport.";
 
     // For demo purposes, just display one of the zones in the viewport (cycling through them on each update)
     /*if (++displayedZone >= _zones.size())
