@@ -8,24 +8,65 @@
  ****************************************************************************/
 
 #include "GeoZoneOverlay.h"
+#include "earcut.hpp"
 
 #include <cmath>
-#include <QDebug>
-#include <QMetaObject>
-#include <QPainter>
-#include <QPainterPath>
 #include <QQuickItem>
-#include <QQuickWindow>
+#include <QDebug>
+#include <QSGFlatColorMaterial>
+#include <QSGGeometry>
+#include <QSGGeometryNode>
+#include <QSGVertexColorMaterial>
 #include <QGeoCoordinate>
 #include <QAbstractItemModel>
 #include <QVariant>
+#include <QVector>
 #include <QtQml/QQmlProperty>
 
+#include <array>
+#include <vector>
+
+namespace {
+
+bool pointsEqual(const std::array<double, 2>& a, const std::array<double, 2>& b)
+{
+    return a[0] == b[0] && a[1] == b[1];
+}
+
+double mercatorYFromLatitude(double latitudeDeg)
+{
+    // Clamp latitude to the valid Web Mercator range to avoid infinities.
+    constexpr double kMaxMercatorLat = 85.05112878;
+    const double clampedLat = std::clamp(latitudeDeg, -kMaxMercatorLat, kMaxMercatorLat);
+    const double latRad = clampedLat * M_PI / 180.0;
+    return std::log(std::tan(M_PI / 4.0 + latRad / 2.0));
+}
+
+double normalizeDeltaLongitude(double deltaLongitude)
+{
+    // Project to the nearest wrapped world copy in [-180, 180].
+    return std::remainder(deltaLongitude, 360.0);
+}
+
+bool intervalIntersects(double minA, double maxA, double minB, double maxB)
+{
+    return !(maxA < minB || minA > maxB);
+}
+
+constexpr float kOverlayAlpha = 0.4f;
+constexpr int kOutlineAlpha = 180;
+
+} // namespace
+
 GeoZoneOverlay::GeoZoneOverlay(QQuickItem* parent)
-    : QQuickPaintedItem(parent)
+    : QQuickItem(parent)
 {
     setAcceptedMouseButtons(Qt::NoButton);
-    setAntialiasing(true);
+    setFlag(QQuickItem::ItemHasContents, true);
+    setOpacity(kOverlayAlpha);
+
+    connect(this, &QQuickItem::widthChanged, this, &GeoZoneOverlay::refresh);
+    connect(this, &QQuickItem::heightChanged, this, &GeoZoneOverlay::refresh);
 }
 
 void GeoZoneOverlay::setMap(QObject* map)
@@ -64,6 +105,7 @@ void GeoZoneOverlay::setModel(QAbstractItemModel* model)
 
     _model = model;
     connectModel(model);
+    rebuildZoneCache();
     emit modelChanged();
     refresh();
 }
@@ -87,22 +129,146 @@ void GeoZoneOverlay::refresh()
 
 void GeoZoneOverlay::onModelChanged()
 {
+    rebuildZoneCache();
     update();
 }
 
 void GeoZoneOverlay::onRowsInserted(const QModelIndex&, int, int)
 {
+    rebuildZoneCache();
     update();
 }
 
 void GeoZoneOverlay::onRowsRemoved(const QModelIndex&, int, int)
 {
+    rebuildZoneCache();
     update();
 }
 
 void GeoZoneOverlay::onModelReset()
 {
+    rebuildZoneCache();
     update();
+}
+
+void GeoZoneOverlay::rebuildZoneCache()
+{
+    _zoneCache.clear();
+
+    if (!_model) {
+        return;
+    }
+
+    const int zoneCount = _model->rowCount();
+    _zoneCache.reserve(zoneCount);
+    int triangulatedWithHoles = 0;
+    int triangulatedOuterOnly = 0;
+    int triangulatedFanFallback = 0;
+    int triangulationFailed = 0;
+
+    for (int row = 0; row < zoneCount; ++row) {
+        const QModelIndex index = _model->index(row, 0);
+        const QVariantList pathList = index.data(Qt::UserRole + 1).toList(); // PathRole
+        if (pathList.size() < 3) {
+            continue;
+        }
+
+        ZoneRenderData zone;
+        zone.color = index.data(Qt::UserRole + 2).value<QColor>(); // ColorRole
+
+        zone.minLat = std::numeric_limits<double>::max();
+        zone.maxLat = std::numeric_limits<double>::lowest();
+        zone.minLon = std::numeric_limits<double>::max();
+        zone.maxLon = std::numeric_limits<double>::lowest();
+        zone.minMercY = std::numeric_limits<double>::max();
+        zone.maxMercY = std::numeric_limits<double>::lowest();
+
+        zone.outerRing.reserve(pathList.size());
+        for (const QVariant& coordVar : pathList) {
+            const QGeoCoordinate coordinate = coordVar.value<QGeoCoordinate>();
+            if (!coordinate.isValid()) {
+                continue;
+            }
+
+            zone.outerRing.append(coordinate);
+            zone.minLat = std::min(zone.minLat, coordinate.latitude());
+            zone.maxLat = std::max(zone.maxLat, coordinate.latitude());
+            zone.minLon = std::min(zone.minLon, coordinate.longitude());
+            zone.maxLon = std::max(zone.maxLon, coordinate.longitude());
+            const double mercY = mercatorYFromLatitude(coordinate.latitude());
+            zone.minMercY = std::min(zone.minMercY, mercY);
+            zone.maxMercY = std::max(zone.maxMercY, mercY);
+        }
+
+        if (zone.outerRing.size() < 3 || zone.minLat > zone.maxLat || zone.minLon > zone.maxLon) {
+            continue;
+        }
+
+        {
+            double previousRawLon = zone.outerRing.first().longitude();
+            double currentUnwrappedLon = previousRawLon;
+            zone.minUnwrappedLon = currentUnwrappedLon;
+            zone.maxUnwrappedLon = currentUnwrappedLon;
+
+            for (int i = 1; i < zone.outerRing.size(); ++i) {
+                const double rawLon = zone.outerRing[i].longitude();
+                const double deltaLon = normalizeDeltaLongitude(rawLon - previousRawLon);
+                currentUnwrappedLon += deltaLon;
+                zone.minUnwrappedLon = std::min(zone.minUnwrappedLon, currentUnwrappedLon);
+                zone.maxUnwrappedLon = std::max(zone.maxUnwrappedLon, currentUnwrappedLon);
+                previousRawLon = rawLon;
+            }
+        }
+
+        const QVariantList holeRings = index.data(Qt::UserRole + 5).toList(); // HoleRole
+        zone.holeRings.reserve(holeRings.size());
+        for (const QVariant& ringVar : holeRings) {
+            const QVariantList ring = ringVar.toList();
+            if (ring.size() < 3) {
+                continue;
+            }
+
+            QVector<QGeoCoordinate> holeRing;
+            holeRing.reserve(ring.size());
+            for (const QVariant& coordVar : ring) {
+                const QGeoCoordinate coordinate = coordVar.value<QGeoCoordinate>();
+                if (coordinate.isValid()) {
+                    holeRing.append(coordinate);
+                }
+            }
+
+            if (holeRing.size() >= 3) {
+                zone.holeRings.append(holeRing);
+            }
+        }
+
+        zone.triangulationMode = triangulateZone(zone);
+        switch (zone.triangulationMode) {
+        case TriangulationMode::WithHoles:
+            triangulatedWithHoles++;
+            break;
+        case TriangulationMode::OuterOnly:
+            triangulatedOuterOnly++;
+            break;
+        case TriangulationMode::FanFallback:
+            triangulatedFanFallback++;
+            break;
+        case TriangulationMode::Failed:
+            triangulationFailed++;
+            break;
+        }
+
+        _zoneCache.append(zone);
+    }
+
+    qDebug().noquote()
+        << QStringLiteral("GeoZoneOverlay cache stats - modelRows:%1 cachedZones:%2 triangulated(withHoles:%3 outerOnly:%4 fanFallback:%5 failed:%6)")
+              .arg(zoneCount)
+              .arg(_zoneCache.size())
+              .arg(triangulatedWithHoles)
+              .arg(triangulatedOuterOnly)
+              .arg(triangulatedFanFallback)
+              .arg(triangulationFailed);
 }
 
 QPointF GeoZoneOverlay::mapPointForCoordinate(const QGeoCoordinate& coordinate) const
@@ -136,72 +302,343 @@ QPointF GeoZoneOverlay::mapPointForCoordinate(const QGeoCoordinate& coordinate) 
     return QPointF(screenX, screenY);
 }
 
-void GeoZoneOverlay::paint(QPainter* painter)
+GeoZoneOverlay::TriangulationMode GeoZoneOverlay::triangulateZone(ZoneRenderData& zone) const
+{
+    zone.triangleVertices.clear();
+
+    std::vector<std::vector<std::array<double, 2>>> polygon;
+    polygon.reserve(1 + static_cast<size_t>(zone.holeRings.size()));
+
+    std::vector<std::array<double, 2>> flattened;
+    flattened.reserve(static_cast<size_t>(zone.outerRing.size()));
+
+    auto appendRingPoints = [&polygon, &flattened](const QVector<QGeoCoordinate>& ring) {
+        if (ring.size() < 3) {
+            return;
+        }
+
+        std::vector<std::array<double, 2>> ringPoints;
+        ringPoints.reserve(static_cast<size_t>(ring.size()));
+
+        double previousRawLon = ring.first().longitude();
+        double currentUnwrappedLon = previousRawLon;
+        ringPoints.push_back({ currentUnwrappedLon, mercatorYFromLatitude(ring.first().latitude()) });
+
+        for (int i = 1; i < ring.size(); ++i) {
+            const double rawLon = ring[i].longitude();
+            const double deltaLon = normalizeDeltaLongitude(rawLon - previousRawLon);
+            currentUnwrappedLon += deltaLon;
+            ringPoints.push_back({ currentUnwrappedLon, mercatorYFromLatitude(ring[i].latitude()) });
+            previousRawLon = rawLon;
+        }
+
+        while (ringPoints.size() > 1 && pointsEqual(ringPoints.front(), ringPoints.back())) {
+            ringPoints.pop_back();
+        }
+
+        if (ringPoints.size() < 3) {
+            return;
+        }
+
+        polygon.push_back(ringPoints);
+        flattened.insert(flattened.end(), ringPoints.begin(), ringPoints.end());
+    };
+
+    appendRingPoints(zone.outerRing);
+    if (polygon.empty()) {
+        return TriangulationMode::Failed;
+    }
+
+    for (const QVector<QGeoCoordinate>& holeRing : zone.holeRings) {
+        appendRingPoints(holeRing);
+    }
+
+    std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+    TriangulationMode triangulationMode = TriangulationMode::WithHoles;
+
+    if (indices.empty() && polygon.front().size() >= 3) {
+        // Hole topology can occasionally be invalid after clipping; render outer shell as fallback.
+        flattened.assign(polygon.front().begin(), polygon.front().end());
+        const uint32_t vertexCount = static_cast<uint32_t>(flattened.size());
+        indices.reserve(static_cast<size_t>((vertexCount - 2) * 3));
+        for (uint32_t i = 1; i + 1 < vertexCount; ++i) {
+            indices.push_back(0);
+            indices.push_back(i);
+            indices.push_back(i + 1);
+        }
+        triangulationMode = indices.empty() ? TriangulationMode::Failed : TriangulationMode::FanFallback;
+    }
+
+    if (indices.empty()) {
+        return TriangulationMode::Failed;
+    }
+
+    zone.triangleVertices.reserve(static_cast<int>(indices.size()));
+    for (const uint32_t index : indices) {
+        if (index < flattened.size()) {
+            const std::array<double, 2>& point = flattened[index];
+            zone.triangleVertices.append(QPointF(point[0], point[1]));
+        }
+    }
+
+    return zone.triangleVertices.isEmpty() ? TriangulationMode::Failed : triangulationMode;
+}
+
+bool GeoZoneOverlay::intersectsVisibleRegion(const ZoneRenderData& zone) const
+{
+    if (!_map) {
+        return true;
+    }
+
+    const QGeoCoordinate centerCoord = QQmlProperty::read(_map, "center").value<QGeoCoordinate>();
+    const double zoomLevel = QQmlProperty::read(_map, "zoomLevel").toDouble();
+    const double mapWidth = QQmlProperty::read(_map, "width").toDouble();
+    const double mapHeight = QQmlProperty::read(_map, "height").toDouble();
+    if (mapWidth <= 0.0 || mapHeight <= 0.0) {
+        return true;
+    }
+
+    const double totalPixels = 256.0 * std::pow(2.0, zoomLevel);
+    const double xScale = totalPixels / 360.0;
+    const double yScale = totalPixels / (2.0 * M_PI);
+    const double centerLon = centerCoord.longitude();
+    const double centerMercY = mercatorYFromLatitude(centerCoord.latitude());
+
+    const double halfLonSpan = (mapWidth * 0.5) / xScale;
+    const double viewMinLon = centerLon - halfLonSpan;
+    const double viewMaxLon = centerLon + halfLonSpan;
+
+    const double zoneMidLon = (zone.minUnwrappedLon + zone.maxUnwrappedLon) * 0.5;
+    const double kBase = std::round((centerLon - zoneMidLon) / 360.0);
+    bool lonIntersects = false;
+    for (int kOffset = -1; kOffset <= 1; ++kOffset) {
+        const double shift = (kBase + kOffset) * 360.0;
+        if (intervalIntersects(zone.minUnwrappedLon + shift, zone.maxUnwrappedLon + shift, viewMinLon, viewMaxLon)) {
+            lonIntersects = true;
+            break;
+        }
+    }
+
+    const double halfMercSpan = (mapHeight * 0.5) / yScale;
+    const double viewMinMercY = centerMercY - halfMercSpan;
+    const double viewMaxMercY = centerMercY + halfMercSpan;
+    const bool latIntersects = intervalIntersects(zone.minMercY, zone.maxMercY, viewMinMercY, viewMaxMercY);
+
+    return lonIntersects && latIntersects;
+}
+
+QSGNode* GeoZoneOverlay::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePaintNodeData* /*updatePaintNodeData*/)
 {
     if (!_map || !_model) {
-        return;
+        delete oldNode;
+        return nullptr;
     }
 
-    const int zoneCount = _model->rowCount();
-    if (zoneCount == 0) {
-        return;
+    QSGNode* rootNode = oldNode ? oldNode : new QSGNode;
+    QSGGeometryNode* fillGeometryNode = static_cast<QSGGeometryNode*>(rootNode->childAtIndex(0));
+    QSGGeometryNode* outlineGeometryNode = static_cast<QSGGeometryNode*>(rootNode->childAtIndex(1));
+    if (!fillGeometryNode || !outlineGeometryNode) {
+        while (QSGNode* child = rootNode->firstChild()) {
+            rootNode->removeChildNode(child);
+            delete child;
+        }
+
+        fillGeometryNode = new QSGGeometryNode;
+        QSGGeometry* fillGeometry = new QSGGeometry(QSGGeometry::defaultAttributes_ColoredPoint2D(), 0);
+        fillGeometry->setDrawingMode(QSGGeometry::DrawTriangles);
+
+        QSGVertexColorMaterial* fillMaterial = new QSGVertexColorMaterial;
+        fillMaterial->setFlag(QSGMaterial::Blending, true);
+
+        fillGeometryNode->setFlag(QSGNode::OwnsGeometry);
+        fillGeometryNode->setFlag(QSGNode::OwnsMaterial);
+        fillGeometryNode->setGeometry(fillGeometry);
+        fillGeometryNode->setMaterial(fillMaterial);
+        rootNode->appendChildNode(fillGeometryNode);
+
+        outlineGeometryNode = new QSGGeometryNode;
+        QSGGeometry* outlineGeometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 0);
+        outlineGeometry->setDrawingMode(QSGGeometry::DrawLines);
+
+        QColor outlineColor(0, 0, 0, kOutlineAlpha);
+        QSGFlatColorMaterial* outlineMaterial = new QSGFlatColorMaterial;
+        outlineMaterial->setColor(outlineColor);
+        outlineMaterial->setFlag(QSGMaterial::Blending, true);
+
+        outlineGeometryNode->setFlag(QSGNode::OwnsGeometry);
+        outlineGeometryNode->setFlag(QSGNode::OwnsMaterial);
+        outlineGeometryNode->setGeometry(outlineGeometry);
+        outlineGeometryNode->setMaterial(outlineMaterial);
+        rootNode->appendChildNode(outlineGeometryNode);
     }
 
-    painter->setRenderHint(QPainter::Antialiasing, true);
+    if (_zoneCache.isEmpty()) {
+        fillGeometryNode->geometry()->allocate(0);
+        outlineGeometryNode->geometry()->allocate(0);
+        fillGeometryNode->markDirty(QSGNode::DirtyGeometry);
+        outlineGeometryNode->markDirty(QSGNode::DirtyGeometry);
+        return rootNode;
+    }
 
-    for (int row = 0; row < zoneCount; ++row) {
-        QModelIndex index = _model->index(row, 0);
-        QVariant colorVar = index.data(Qt::UserRole + 2); // ColorRole
-        QColor fillColor = colorVar.value<QColor>();
-        fillColor.setAlphaF(0.4);
-
-        QVariant pathVar = index.data(Qt::UserRole + 1); // PathRole
-        QVariantList pathList = pathVar.toList();
-        if (pathList.isEmpty()) {
+    int totalFillVertexCount = 0;
+    int totalOutlineVertexCount = 0;
+    int visibleZones = 0;
+    int culledZones = 0;
+    int visibleZonesNoTriangles = 0;
+    int renderedZones = 0;
+    for (const ZoneRenderData& zone : _zoneCache) {
+        if (!intersectsVisibleRegion(zone)) {
+            culledZones++;
             continue;
         }
 
-        QPainterPath polygonPath;
-        polygonPath.setFillRule(Qt::OddEvenFill); // OddEvenFill cuts holes automatically
-
-        // Outer ring
-        bool firstPoint = true;
-        for (const QVariant& coordVar : pathList) {
-            QPointF screenPoint = mapPointForCoordinate(coordVar.value<QGeoCoordinate>());
-            if (firstPoint) {
-                polygonPath.moveTo(screenPoint);
-                firstPoint = false;
-            } else {
-                polygonPath.lineTo(screenPoint);
-            }
-        }
-        polygonPath.closeSubpath();
-
-        if (polygonPath.isEmpty()) {
+        visibleZones++;
+        if (zone.triangleVertices.isEmpty()) {
+            visibleZonesNoTriangles++;
             continue;
         }
 
-        // Hole rings (if present) — each child ring is its own subpath
-        const QVariantList holeRings = index.data(Qt::UserRole + 5).toList(); // HoleRole
-        for (const QVariant& ringVar : holeRings) {
-            const QVariantList ring = ringVar.toList();
-            if (ring.size() < 3) {
-                continue;
-            }
+        renderedZones++;
+        totalFillVertexCount += zone.triangleVertices.size();
 
-            bool firstHolePoint = true;
-            for (const QVariant& coordVar : ring) {
-                QPointF screenPoint = mapPointForCoordinate(coordVar.value<QGeoCoordinate>());
-                if (firstHolePoint) {
-                    polygonPath.moveTo(screenPoint);
-                    firstHolePoint = false;
-                } else {
-                    polygonPath.lineTo(screenPoint);
-                }
-            }
-            polygonPath.closeSubpath();
+        totalOutlineVertexCount += zone.outerRing.size() * 2;
+        for (const QVector<QGeoCoordinate>& holeRing : zone.holeRings) {
+            totalOutlineVertexCount += holeRing.size() * 2;
+        }
+    }
+
+    QSGGeometry* fillGeometry = fillGeometryNode->geometry();
+    fillGeometry->allocate(totalFillVertexCount);
+
+    QSGGeometry* outlineGeometry = outlineGeometryNode->geometry();
+    outlineGeometry->allocate(totalOutlineVertexCount);
+
+    if (totalFillVertexCount == 0) {
+        fillGeometryNode->markDirty(QSGNode::DirtyGeometry);
+        outlineGeometryNode->markDirty(QSGNode::DirtyGeometry);
+        return rootNode;
+    }
+
+    QSGGeometry::ColoredPoint2D* fillVertices = fillGeometry->vertexDataAsColoredPoint2D();
+    QSGGeometry::Point2D* outlineVertices = outlineGeometry->vertexDataAsPoint2D();
+    int fillVertexIndex = 0;
+    int outlineVertexIndex = 0;
+
+    const QGeoCoordinate centerCoord = QQmlProperty::read(_map, "center").value<QGeoCoordinate>();
+    const double zoomLevel = QQmlProperty::read(_map, "zoomLevel").toDouble();
+    const double mapWidth  = QQmlProperty::read(_map, "width").toDouble();
+    const double mapHeight = QQmlProperty::read(_map, "height").toDouble();
+    const double totalPixels = 256.0 * std::pow(2.0, zoomLevel);
+    const double xScale = totalPixels / 360.0;
+    const double yScale = totalPixels / (2.0 * M_PI);
+    const double centerLongitude = centerCoord.longitude();
+    const double centerMercY = mercatorYFromLatitude(centerCoord.latitude());
+    int renderedZonesOnScreen = 0;
+
+    for (const ZoneRenderData& zone : _zoneCache) {
+        if (!intersectsVisibleRegion(zone) || zone.triangleVertices.isEmpty()) {
+            continue;
         }
 
-        painter->fillPath(polygonPath, fillColor);
+        const QColor fillColor = zone.color;
+        const int alpha = static_cast<int>(kOverlayAlpha * 255.0f);
+        const int red = (fillColor.red() * alpha) / 255;
+        const int green = (fillColor.green() * alpha) / 255;
+        const int blue = (fillColor.blue() * alpha) / 255;
+
+        bool zoneTouchesScreen = false;
+
+        for (const QPointF& mercatorPoint : zone.triangleVertices) {
+            const double deltaLon = normalizeDeltaLongitude(mercatorPoint.x() - centerLongitude);
+            const double screenX = mapWidth / 2.0 + deltaLon * xScale;
+            const double screenY = mapHeight / 2.0 + (centerMercY - mercatorPoint.y()) * yScale;
+            fillVertices[fillVertexIndex++].set(screenX, screenY, red, green, blue, alpha);
+
+            if (!zoneTouchesScreen && screenX >= 0.0 && screenX <= mapWidth && screenY >= 0.0 && screenY <= mapHeight) {
+                zoneTouchesScreen = true;
+            }
+        }
+
+        auto appendOutlineRing = [&](const QVector<QGeoCoordinate>& ring) {
+            const int ringSize = ring.size();
+            if (ringSize < 2) {
+                return;
+            }
+
+            double previousRawLon = ring.first().longitude();
+            double currentUnwrappedLon = centerLongitude + normalizeDeltaLongitude(previousRawLon - centerLongitude);
+            double previousX = mapWidth / 2.0 + (currentUnwrappedLon - centerLongitude) * xScale;
+            double previousY = mapHeight / 2.0 + (centerMercY - mercatorYFromLatitude(ring.first().latitude())) * yScale;
+
+            for (int i = 1; i <= ringSize; ++i) {
+                const QGeoCoordinate& b = ring[i % ringSize];
+                const double rawLon = b.longitude();
+                const double deltaLon = normalizeDeltaLongitude(rawLon - previousRawLon);
+                currentUnwrappedLon += deltaLon;
+
+                const double bx = mapWidth / 2.0 + (currentUnwrappedLon - centerLongitude) * xScale;
+                const double by = mapHeight / 2.0 + (centerMercY - mercatorYFromLatitude(b.latitude())) * yScale;
+
+                outlineVertices[outlineVertexIndex++].set(previousX, previousY);
+                outlineVertices[outlineVertexIndex++].set(bx, by);
+
+                previousRawLon = rawLon;
+                previousX = bx;
+                previousY = by;
+            }
+        };
+
+        appendOutlineRing(zone.outerRing);
+        for (const QVector<QGeoCoordinate>& holeRing : zone.holeRings) {
+            appendOutlineRing(holeRing);
+        }
+
+        if (zoneTouchesScreen) {
+            renderedZonesOnScreen++;
+        }
     }
+
+    fillGeometryNode->markDirty(QSGNode::DirtyGeometry);
+    outlineGeometryNode->markDirty(QSGNode::DirtyGeometry);
+
+    static int lastTotalZones = -1;
+    static int lastVisibleZones = -1;
+    static int lastCulledZones = -1;
+    static int lastVisibleNoTriangles = -1;
+    static int lastRenderedZones = -1;
+    static int lastFillVertexCount = -1;
+    static int lastOutlineVertexCount = -1;
+    static int lastRenderedZonesOnScreen = -1;
+
+    const int totalZones = _zoneCache.size();
+    if (totalZones != lastTotalZones ||
+        visibleZones != lastVisibleZones ||
+        culledZones != lastCulledZones ||
+        visibleZonesNoTriangles != lastVisibleNoTriangles ||
+        renderedZones != lastRenderedZones ||
+        totalFillVertexCount != lastFillVertexCount ||
+        totalOutlineVertexCount != lastOutlineVertexCount ||
+        renderedZonesOnScreen != lastRenderedZonesOnScreen) {
+        qDebug().noquote()
+            << QStringLiteral("GeoZoneOverlay frame stats - total:%1 visible:%2 culled:%3 visibleNoTriangles:%4 rendered:%5 onScreenApprox:%6 fillVertices:%7 outlineVertices:%8")
+                  .arg(totalZones)
+                  .arg(visibleZones)
+                  .arg(culledZones)
+                  .arg(visibleZonesNoTriangles)
+                  .arg(renderedZones)
+                  .arg(renderedZonesOnScreen)
+                  .arg(totalFillVertexCount)
+                  .arg(totalOutlineVertexCount);
+
+        lastTotalZones = totalZones;
+        lastVisibleZones = visibleZones;
+        lastCulledZones = culledZones;
+        lastVisibleNoTriangles = visibleZonesNoTriangles;
+        lastRenderedZones = renderedZones;
+        lastFillVertexCount = totalFillVertexCount;
+        lastOutlineVertexCount = totalOutlineVertexCount;
+        lastRenderedZonesOnScreen = renderedZonesOnScreen;
+    }
+
+    return rootNode;
 }

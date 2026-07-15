@@ -12,10 +12,13 @@
 #include <QAbstractItemModel>
 #include <QGeoCoordinate>
 #include <QPointer>
-#include <QQuickPaintedItem>
+#include <QQuickItem>
 #include <QVariant>
+#include <QVector>
 
-class GeoZoneOverlay : public QQuickPaintedItem
+class QSGNode;
+
+class GeoZoneOverlay : public QQuickItem
 {
     Q_OBJECT
     Q_PROPERTY(QObject* map READ map WRITE setMap NOTIFY mapChanged)
@@ -23,7 +26,7 @@ class GeoZoneOverlay : public QQuickPaintedItem
 
 public:
     explicit GeoZoneOverlay(QQuickItem* parent = nullptr);
-    void paint(QPainter* painter) override;
+    QSGNode* updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePaintNodeData* updatePaintNodeData) override;
 
     QObject* map() const { return _map.data(); }
     QAbstractItemModel* model() const { return _model.data(); }
@@ -44,9 +47,36 @@ private slots:
     void onModelReset();
 
 private:
+    enum class TriangulationMode {
+        Failed = 0,
+        WithHoles,
+        OuterOnly,
+        FanFallback,
+    };
+
+    struct ZoneRenderData {
+        QVector<QGeoCoordinate> outerRing;
+        QVector<QVector<QGeoCoordinate>> holeRings;
+        QVector<QPointF> triangleVertices;
+        TriangulationMode triangulationMode = TriangulationMode::Failed;
+        QColor color;
+        double minLat = 0.0;
+        double maxLat = 0.0;
+        double minLon = 0.0;
+        double maxLon = 0.0;
+        double minMercY = 0.0;
+        double maxMercY = 0.0;
+        double minUnwrappedLon = 0.0;
+        double maxUnwrappedLon = 0.0;
+    };
+
     void connectModel(QAbstractItemModel* model);
+    void rebuildZoneCache();
     QPointF mapPointForCoordinate(const QGeoCoordinate& coordinate) const;
+    TriangulationMode triangulateZone(ZoneRenderData& zone) const;
+    bool intersectsVisibleRegion(const ZoneRenderData& zone) const;
 
     QPointer<QObject> _map;
     QPointer<QAbstractItemModel> _model;
+    QVector<ZoneRenderData> _zoneCache;
 };
