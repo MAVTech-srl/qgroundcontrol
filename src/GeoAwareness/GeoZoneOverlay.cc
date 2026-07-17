@@ -12,7 +12,6 @@
 
 #include <cmath>
 #include <QQuickItem>
-#include <QDebug>
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
@@ -53,17 +52,15 @@ bool intervalIntersects(double minA, double maxA, double minB, double maxB)
     return !(maxA < minB || minA > maxB);
 }
 
-constexpr float kOverlayAlpha = 0.4f;
-constexpr int kOutlineAlpha = 180;
+constexpr int kOverlayAlpha = static_cast<int>(0.4f * 255.0f);
+constexpr int kOutlineAlpha = 0;
 
 } // namespace
 
-GeoZoneOverlay::GeoZoneOverlay(QQuickItem* parent)
-    : QQuickItem(parent)
+GeoZoneOverlay::GeoZoneOverlay(QQuickItem* parent) : QQuickItem(parent)
 {
     setAcceptedMouseButtons(Qt::NoButton);
     setFlag(QQuickItem::ItemHasContents, true);
-    setOpacity(kOverlayAlpha);
 
     connect(this, &QQuickItem::widthChanged, this, &GeoZoneOverlay::refresh);
     connect(this, &QQuickItem::heightChanged, this, &GeoZoneOverlay::refresh);
@@ -260,15 +257,6 @@ void GeoZoneOverlay::rebuildZoneCache()
 
         _zoneCache.append(zone);
     }
-
-    qDebug().noquote()
-        << QStringLiteral("GeoZoneOverlay cache stats - modelRows:%1 cachedZones:%2 triangulated(withHoles:%3 outerOnly:%4 fanFallback:%5 failed:%6)")
-              .arg(zoneCount)
-              .arg(_zoneCache.size())
-              .arg(triangulatedWithHoles)
-              .arg(triangulatedOuterOnly)
-              .arg(triangulatedFanFallback)
-              .arg(triangulationFailed);
 }
 
 QPointF GeoZoneOverlay::mapPointForCoordinate(const QGeoCoordinate& coordinate) const
@@ -384,49 +372,6 @@ GeoZoneOverlay::TriangulationMode GeoZoneOverlay::triangulateZone(ZoneRenderData
     return zone.triangleVertices.isEmpty() ? TriangulationMode::Failed : triangulationMode;
 }
 
-bool GeoZoneOverlay::intersectsVisibleRegion(const ZoneRenderData& zone) const
-{
-    if (!_map) {
-        return true;
-    }
-
-    const QGeoCoordinate centerCoord = QQmlProperty::read(_map, "center").value<QGeoCoordinate>();
-    const double zoomLevel = QQmlProperty::read(_map, "zoomLevel").toDouble();
-    const double mapWidth = QQmlProperty::read(_map, "width").toDouble();
-    const double mapHeight = QQmlProperty::read(_map, "height").toDouble();
-    if (mapWidth <= 0.0 || mapHeight <= 0.0) {
-        return true;
-    }
-
-    const double totalPixels = 256.0 * std::pow(2.0, zoomLevel);
-    const double xScale = totalPixels / 360.0;
-    const double yScale = totalPixels / (2.0 * M_PI);
-    const double centerLon = centerCoord.longitude();
-    const double centerMercY = mercatorYFromLatitude(centerCoord.latitude());
-
-    const double halfLonSpan = (mapWidth * 0.5) / xScale;
-    const double viewMinLon = centerLon - halfLonSpan;
-    const double viewMaxLon = centerLon + halfLonSpan;
-
-    const double zoneMidLon = (zone.minUnwrappedLon + zone.maxUnwrappedLon) * 0.5;
-    const double kBase = std::round((centerLon - zoneMidLon) / 360.0);
-    bool lonIntersects = false;
-    for (int kOffset = -1; kOffset <= 1; ++kOffset) {
-        const double shift = (kBase + kOffset) * 360.0;
-        if (intervalIntersects(zone.minUnwrappedLon + shift, zone.maxUnwrappedLon + shift, viewMinLon, viewMaxLon)) {
-            lonIntersects = true;
-            break;
-        }
-    }
-
-    const double halfMercSpan = (mapHeight * 0.5) / yScale;
-    const double viewMinMercY = centerMercY - halfMercSpan;
-    const double viewMaxMercY = centerMercY + halfMercSpan;
-    const bool latIntersects = intervalIntersects(zone.minMercY, zone.maxMercY, viewMinMercY, viewMaxMercY);
-
-    return lonIntersects && latIntersects;
-}
-
 QSGNode* GeoZoneOverlay::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePaintNodeData* /*updatePaintNodeData*/)
 {
     if (!_map || !_model) {
@@ -449,6 +394,7 @@ QSGNode* GeoZoneOverlay::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePai
 
         QSGVertexColorMaterial* fillMaterial = new QSGVertexColorMaterial;
         fillMaterial->setFlag(QSGMaterial::Blending, true);
+        fillMaterial->setFlag(QSGMaterial::RequiresFullMatrix, true);
 
         fillGeometryNode->setFlag(QSGNode::OwnsGeometry);
         fillGeometryNode->setFlag(QSGNode::OwnsMaterial);
@@ -487,17 +433,12 @@ QSGNode* GeoZoneOverlay::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePai
     int visibleZonesNoTriangles = 0;
     int renderedZones = 0;
     for (const ZoneRenderData& zone : _zoneCache) {
-        if (!intersectsVisibleRegion(zone)) {
-            culledZones++;
-            continue;
-        }
-
-        visibleZones++;
         if (zone.triangleVertices.isEmpty()) {
             visibleZonesNoTriangles++;
             continue;
         }
 
+        visibleZones++;
         renderedZones++;
         totalFillVertexCount += zone.triangleVertices.size();
 
@@ -536,23 +477,22 @@ QSGNode* GeoZoneOverlay::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePai
     int renderedZonesOnScreen = 0;
 
     for (const ZoneRenderData& zone : _zoneCache) {
-        if (!intersectsVisibleRegion(zone) || zone.triangleVertices.isEmpty()) {
+        if (zone.triangleVertices.isEmpty()) {
             continue;
         }
 
         const QColor fillColor = zone.color;
-        const int alpha = static_cast<int>(kOverlayAlpha * 255.0f);
-        const int red = (fillColor.red() * alpha) / 255;
-        const int green = (fillColor.green() * alpha) / 255;
-        const int blue = (fillColor.blue() * alpha) / 255;
 
         bool zoneTouchesScreen = false;
 
         for (const QPointF& mercatorPoint : zone.triangleVertices) {
-            const double deltaLon = normalizeDeltaLongitude(mercatorPoint.x() - centerLongitude);
+            const double deltaLon = mercatorPoint.x() - centerLongitude;
             const double screenX = mapWidth / 2.0 + deltaLon * xScale;
             const double screenY = mapHeight / 2.0 + (centerMercY - mercatorPoint.y()) * yScale;
-            fillVertices[fillVertexIndex++].set(screenX, screenY, red, green, blue, alpha);
+            const int r = fillColor.red()   * kOverlayAlpha / 255;
+            const int g = fillColor.green() * kOverlayAlpha / 255;
+            const int b = fillColor.blue()  * kOverlayAlpha / 255;
+            fillVertices[fillVertexIndex++].set(screenX, screenY, r, g, b, kOverlayAlpha);
 
             if (!zoneTouchesScreen && screenX >= 0.0 && screenX <= mapWidth && screenY >= 0.0 && screenY <= mapHeight) {
                 zoneTouchesScreen = true;
@@ -560,6 +500,9 @@ QSGNode* GeoZoneOverlay::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePai
         }
 
         auto appendOutlineRing = [&](const QVector<QGeoCoordinate>& ring) {
+            if (kOutlineAlpha == 0) {
+                return;
+            }
             const int ringSize = ring.size();
             if (ringSize < 2) {
                 return;
@@ -619,17 +562,6 @@ QSGNode* GeoZoneOverlay::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePai
         totalFillVertexCount != lastFillVertexCount ||
         totalOutlineVertexCount != lastOutlineVertexCount ||
         renderedZonesOnScreen != lastRenderedZonesOnScreen) {
-        qDebug().noquote()
-            << QStringLiteral("GeoZoneOverlay frame stats - total:%1 visible:%2 culled:%3 visibleNoTriangles:%4 rendered:%5 onScreenApprox:%6 fillVertices:%7 outlineVertices:%8")
-                  .arg(totalZones)
-                  .arg(visibleZones)
-                  .arg(culledZones)
-                  .arg(visibleZonesNoTriangles)
-                  .arg(renderedZones)
-                  .arg(renderedZonesOnScreen)
-                  .arg(totalFillVertexCount)
-                  .arg(totalOutlineVertexCount);
-
         lastTotalZones = totalZones;
         lastVisibleZones = visibleZones;
         lastCulledZones = culledZones;
