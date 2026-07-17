@@ -74,7 +74,6 @@ private:
     void rebuildZoneCache();
     QPointF mapPointForCoordinate(const QGeoCoordinate& coordinate) const;
     TriangulationMode triangulateZone(ZoneRenderData& zone) const;
-    bool intersectsVisibleRegion(const ZoneRenderData& zone) const;
 
     QPointer<QObject> _map;
     QPointer<QAbstractItemModel> _model;
