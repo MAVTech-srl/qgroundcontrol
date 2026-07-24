@@ -288,6 +288,7 @@ Map {
         anchors.fill: parent
         map: _map
         model: QGroundControl.geoZoneManager.model
+        visible: QGroundControl.settingsManager.flightMapSettings.showAirspaceOverlay.rawValue
     }
 
     onVisibleRegionChanged: {

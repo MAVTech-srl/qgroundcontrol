@@ -17,6 +17,7 @@ ToolStripActionList {
         GuidedActionRTL { },
         GuidedActionPause { },
         FlyViewAdditionalActionsButton { },
+        GeoAwarenessOverlayToggle { },
         FlyViewGripperButton { }
     ]
 }

@@ -102,7 +102,15 @@ void GeoZoneManager::loadFromFile(const QString& path)
 {
     // Clear existing zones
     _model.setZones({});
+    _zones = {};
     _zoneTree.RemoveAll();
+
+    // Terminate if clearing was the goal
+    if (path.isEmpty()) {
+        qDebug() << "Cleared GeoZones";
+        emit countChanged();
+        return;
+    }
 
     // Load file
     QFile file(path);
@@ -213,7 +221,12 @@ void GeoZoneManager::loadFromFile(const QString& path)
 //#define CLIPPING_DEBUG_LOGS
 void GeoZoneManager::clipAllZones()
 {
-    qDebug() << "Clipping all Zones.";
+    if (_zones.isEmpty()) {
+        qDebug() << "No zones to clip";
+        return;
+    }
+
+    qDebug() << "Clipping all Zones";
     // Iterate through all zones and clip them based on altitude layers
     for (int i = 0; i < _zones.size(); i++) {
         // Skip already clipped zones
@@ -337,6 +350,7 @@ void GeoZoneManager::clipAllZones()
     }
 
     _model.setZones(_zones);
+    emit countChanged();
 
     qDebug() << "Finished clipping all zones.";
 }

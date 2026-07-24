@@ -60,6 +60,8 @@ Item {
                         onClicked: {
                             airspaceFileTextField.text = "Please select a JSON file"
                             _mapAirspaceJsonFilePath.value = airspaceFileTextField.text
+                            QGroundControl.geoZoneManager.loadFromFile("")
+                            QGroundControl.geoZoneManager.clipAllZones()
                         }
                     }
 
@@ -85,14 +87,7 @@ Item {
                                 airspaceFileTextField.text = file
                                 _mapAirspaceJsonFilePath.value = airspaceFileTextField.text
                                 QGroundControl.geoZoneManager.loadFromFile(airspaceFileTextField.text)
-                                // Update viewport
-                                /*const rect = _map.visibleRegion.boundingGeoRectangle()
-                                QGroundControl.geoZoneManager.updateViewport(
-                                    rect.topLeft.latitude,
-                                    rect.topLeft.longitude,
-                                    rect.bottomRight.latitude,
-                                    rect.bottomRight.longitude
-                                )*/
+                                QGroundControl.geoZoneManager.clipAllZones()
                             }
                         }
                     }

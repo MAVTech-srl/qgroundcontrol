@@ -15,12 +15,14 @@
 #include <QQuickItem>
 #include <QVariant>
 #include <QVector>
+#include <QtQmlIntegration/QtQmlIntegration>
 
 class QSGNode;
 
 class GeoZoneOverlay : public QQuickItem
 {
     Q_OBJECT
+    QML_ELEMENT
     Q_PROPERTY(QObject* map READ map WRITE setMap NOTIFY mapChanged)
     Q_PROPERTY(QAbstractItemModel* model READ model WRITE setModel NOTIFY modelChanged)
 

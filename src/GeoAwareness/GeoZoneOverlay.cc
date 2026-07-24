@@ -8,7 +8,7 @@
  ****************************************************************************/
 
 #include "GeoZoneOverlay.h"
-#include "earcut.hpp"
+#include <mapbox/earcut.hpp>
 
 #include <cmath>
 #include <QQuickItem>

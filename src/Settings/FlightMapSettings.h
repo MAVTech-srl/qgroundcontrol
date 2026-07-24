@@ -18,4 +18,5 @@ public:
     DEFINE_SETTINGFACT(mapType)
     DEFINE_SETTINGFACT(elevationMapProvider)
     DEFINE_SETTINGFACT(airspaceFilePath)
+    DEFINE_SETTINGFACT(showAirspaceOverlay)
 };

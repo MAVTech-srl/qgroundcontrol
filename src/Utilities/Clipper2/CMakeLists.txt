@@ -22,6 +22,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_
 CPMAddPackage(
     NAME Clipper2
     VERSION 2.0.1
+    GIT_TAG Clipper2_2.0.1
     GITHUB_REPOSITORY AngusJohnson/Clipper2
     OPTIONS
         "BUILD_APPS OFF"
