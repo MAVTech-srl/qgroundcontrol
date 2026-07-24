@@ -19,6 +19,7 @@
 #include "AudioOutput.h"
 #include "ColoredSvgImageProvider.h"
 #include "FollowMe.h"
+#include "GeoZoneManager.h"
 #include "GraphicsSetup.h"
 #include "JoystickManager.h"
 #include "JsonParsing.h"

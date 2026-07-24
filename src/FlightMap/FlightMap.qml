@@ -275,9 +275,4 @@ Map {
         model: QGroundControl.geoZoneManager.model
         visible: QGroundControl.settingsManager.flightMapSettings.showAirspaceOverlay.rawValue
     }
-
-    Component.onCompleted: {
-        QGroundControl.geoZoneManager.loadFromFile(QGroundControl.settingsManager.flightMapSettings.airspaceFilePath.rawValue)
-        QGroundControl.geoZoneManager.clipAllZones()
-    }
 } // Map

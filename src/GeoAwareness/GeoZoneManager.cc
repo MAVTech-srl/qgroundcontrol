@@ -33,6 +33,14 @@ GeoZoneManager::~GeoZoneManager()
 {
 }
 
+void GeoZoneManager::init()
+{
+    Fact* airspaceFileFact = SettingsManager::instance()->flightMapSettings()->airspaceFilePath();
+    QString path = airspaceFileFact->rawValue().toString();
+    loadFromFile(path);
+    clipAllZones();
+}
+
 QAbstractListModel* GeoZoneManager::model()
 {
     return &_model;

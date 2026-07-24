@@ -40,6 +40,9 @@ public:
 signals:
     void countChanged();
 
+public slots:
+    void init();
+
 private:
     // -----------------------------
     // Internal GeoZone structure
