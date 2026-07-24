@@ -170,8 +170,6 @@ Item {
             ColumnLayout {
                 Layout.fillWidth:   true
                 spacing:            ScreenTools.defaultFontPixelWidth
-                /*enabled:            _viewer3DEnabled.rawValue // WIP Remove if not necessary
-                visible:            _mapAirspaceJsonFilePath.rawValue*/
 
                 RowLayout{
                     Layout.fillWidth:   true
