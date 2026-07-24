@@ -31,6 +31,7 @@ qt_add_qml_module(FlightDisplayModule
         FlyViewTopRightPanel.qml
         FlyViewVideo.qml
         FlyViewWidgetLayer.qml
+        GeoAwarenessOverlayToggle.qml
         GripperMenu.qml
         GuidedActionConfirm.qml
         GuidedActionGripper.qml

@@ -650,7 +650,8 @@ Item {
                         enabled:            true
                         visible:            true
                         dropPanelComponent: centerMapDropPanel
-                    }
+                    },
+                    GeoAwarenessOverlayToggle { }
                 ]
             }
 

@@ -42,6 +42,7 @@ Item {
     property Fact   _customURLFact:     _settingsManager ? _settingsManager.appSettings.customURL : null
     property Fact   _vworldFact:        _settingsManager ? _settingsManager.appSettings.vworldToken : null
     property Fact   _mapAirspaceJsonFilePath: _settingsManager.flightMapSettings.airspaceFilePath
+    property Fact   _showAirspaceOverlayFact: _settingsManager.flightMapSettings.showAirspaceOverlay
 
     SettingsPage {
         id:           settingsPage
@@ -204,6 +205,8 @@ Item {
                         onClicked: {
                             airspaceFileTextField.text = "Please select a JSON file"
                             _mapAirspaceJsonFilePath.value = airspaceFileTextField.text
+                            QGroundControl.geoZoneManager.loadFromFile("")
+                            QGroundControl.geoZoneManager.clipAllZones()
                         }
                     }
 
@@ -229,14 +232,7 @@ Item {
                                 airspaceFileTextField.text = file
                                 _mapAirspaceJsonFilePath.value = airspaceFileTextField.text
                                 QGroundControl.geoZoneManager.loadFromFile(airspaceFileTextField.text)
-                                // Update viewport
-                                /*const rect = _map.visibleRegion.boundingGeoRectangle()
-                                QGroundControl.geoZoneManager.updateViewport(
-                                    rect.topLeft.latitude,
-                                    rect.topLeft.longitude,
-                                    rect.bottomRight.latitude,
-                                    rect.bottomRight.longitude
-                                )*/
+                                QGroundControl.geoZoneManager.clipAllZones()
                             }
                         }
                     }

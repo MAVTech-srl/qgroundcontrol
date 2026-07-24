@@ -22,6 +22,7 @@ class GeoZoneManager : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QAbstractListModel* model READ model CONSTANT)
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
     explicit GeoZoneManager(QObject* parent = nullptr);
@@ -31,9 +32,13 @@ public:
     static void registerQmlTypes();
 
     QAbstractListModel* model();
+    int count() const { return _zones.count(); }
 
     Q_INVOKABLE void loadFromFile(const QString& path);
     Q_INVOKABLE void clipAllZones();
+
+signals:
+    void countChanged();
 
 private:
     // -----------------------------
