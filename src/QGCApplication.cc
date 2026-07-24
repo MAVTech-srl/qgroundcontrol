@@ -41,6 +41,7 @@
 #include "ESP8266ComponentController.h"
 #include "FollowMe.h"
 #include "GeoTagController.h"
+#include "GeoZoneManager.h"
 #include "GimbalController.h"
 #include "GPSRtk.h"
 #include "JoystickConfigController.h"
@@ -266,6 +267,8 @@ QGCApplication::~QGCApplication()
 void QGCApplication::init()
 {
     SettingsManager::instance()->init();
+
+    GeoZoneManager::instance()->init();
 
     LinkManager::registerQmlTypes();
     ParameterManager::registerQmlTypes();
