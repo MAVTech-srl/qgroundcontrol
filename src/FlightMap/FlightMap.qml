@@ -28,21 +28,6 @@ Map {
     property var    _activeVehicle:             QGroundControl.multiVehicleManager.activeVehicle
     property var    _activeVehicleCoordinate:   _activeVehicle ? _activeVehicle.coordinate : QtPositioning.coordinate()
 
-    Timer {
-        id: viewportUpdateTimer
-        interval: 300
-        onTriggered: {
-            const rect = _map.visibleRegion.boundingGeoRectangle()
-            /* Disabled to test bulk clipping of all zones on load
-            QGroundControl.geoZoneManager.updateViewport(
-                rect.topLeft.latitude,
-                rect.topLeft.longitude,
-                rect.bottomRight.latitude,
-                rect.bottomRight.longitude
-            )*/
-        }
-    }
-
     function setVisibleRegion(region) {
         // This works around a bug on Qt where if you set a visibleRegion and then the user moves or zooms the map
         // and then you set the same visibleRegion the map will not move/scale appropriately since it thinks there
@@ -291,12 +276,7 @@ Map {
         visible: QGroundControl.settingsManager.flightMapSettings.showAirspaceOverlay.rawValue
     }
 
-    onVisibleRegionChanged: {
-        viewportUpdateTimer.restart()
-    }
-
     Component.onCompleted: {
-        console.log("Loading geofences from file: " + QGroundControl.settingsManager.flightMapSettings.airspaceFilePath.rawValue)
         QGroundControl.geoZoneManager.loadFromFile(QGroundControl.settingsManager.flightMapSettings.airspaceFilePath.rawValue)
         QGroundControl.geoZoneManager.clipAllZones()
     }

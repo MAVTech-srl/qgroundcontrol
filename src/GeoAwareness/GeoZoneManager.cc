@@ -186,39 +186,16 @@ void GeoZoneManager::loadFromFile(const QString& path)
                 continue;
             }
 
-            //qDebug() << "Parsed GeoZone: index " << index << ", ID: " << zone.id << ", type: " << zone.type << ", minAlt: " << zone.minAltitude << ", polygon points: " << zone.polygon.size();
             insertZoneIntoTree(zone, index++);
             zones.append(zone);
         }
     }
 
-    // Rebuild R-tree with clipped zones
-    /*_zoneTree.RemoveAll();
-    for (int i = 0; i < zones.size(); ++i) {
-        insertZoneIntoTree(zones[i], i);
-    }*/
-
-    // Tree iterator
-    /*auto list = _zoneTree.ListTree();
-    int counter = 0;
-    for (auto aabb : list) {
-        qDebug() << "TreeList [" << counter++ << "]: "
-            << aabb.m_min[0] << ", "
-            << aabb.m_min[1] << ", "
-            << aabb.m_min[2] << "; "
-            << aabb.m_max[0] << ", "
-            << aabb.m_max[1] << ", "
-            << aabb.m_max[2];
-    }*/
-
     qDebug() << "Parsed " << zones.size() << " GeoZones";
-
-    _zones = zones; // Store zones for later viewport queries
-
+    _zones = zones;
     _model.setZones(zones);
 }
 
-//#define CLIPPING_DEBUG_LOGS
 void GeoZoneManager::clipAllZones()
 {
     if (_zones.isEmpty()) {
@@ -231,18 +208,8 @@ void GeoZoneManager::clipAllZones()
     for (int i = 0; i < _zones.size(); i++) {
         // Skip already clipped zones
         if (_zones[i].alreadyClipped) {
-            #ifdef CLIPPING_DEBUG_LOGS
-            qDebug() << "Skipping zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") because it has already been clipped by higher priority zones";
-            #endif
             continue;
         }
-
-        /*if (_zones[i].polygon.size() < 3) {
-            continue;
-        }
-
-        Clipper2Lib::PathsD clippedPaths = geoZoneToClipperPaths(_zones[i].polygon, _zones[i].hole);
-        bool hasOverlapClipping = false;*/
 
         // Find indexes of intersecting zones
         QList<int> intersectingIndexes;
@@ -250,9 +217,6 @@ void GeoZoneManager::clipAllZones()
             intersectingIndexes.push_back(index);
             return true; // continue searching
         });
-        #ifdef CLIPPING_DEBUG_LOGS
-        qDebug() << "---- About to check intersection between zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") and " << intersectingZoneNumber << " other zones in the viewport";
-        #endif
 
         Clipper2Lib::PathsD currentPath = geoZoneToClipperPaths(_zones[i].polygon, _zones[i].holes);
         if (currentPath.empty()) {
@@ -265,9 +229,6 @@ void GeoZoneManager::clipAllZones()
         for (int j : intersectingIndexes) {
             // Only clip current zone intersections with OTHER zones of equal or higher priority (lower minAltitude)
             if (i == j || _zones[i].minAltitude < _zones[j].minAltitude) {
-                #ifdef CLIPPING_DEBUG_LOGS
-                //qDebug() << "Skipping zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << ")";
-                #endif
                 continue;
             }
 
@@ -276,9 +237,6 @@ void GeoZoneManager::clipAllZones()
                 continue;
             }
 
-            #ifdef CLIPPING_DEBUG_LOGS
-            qDebug() << "Going to clip zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << "m) with zone " << _zones[j].name << " (minAlt " << _zones[j].minAltitude << "m)";
-            #endif
             clipper.AddClip(intersectingPath);
             hasClipPaths = true;
         }
@@ -340,13 +298,7 @@ void GeoZoneManager::clipAllZones()
             }
         }
 
-        #ifdef CLIPPING_DEBUG_LOGS
-        qDebug() << "After PolyTreeD clipping zone " << _zones[i].name << " resulting split zones:" << splitZones.size();
-        #endif
-
         _zones[i].alreadyClipped = true;
-        //qDebug() << "Set zone " << _zones[i].name << " (minAlt " << _zones[i].minAltitude << ") as clipped by higher priority zones, final polygon points: " << _zones[i].polygon.size();
-        //break; // TODO: remove this break to handle all zones in the viewport
     }
 
     _model.setZones(_zones);

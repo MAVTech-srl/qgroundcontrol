@@ -372,7 +372,7 @@ GeoZoneOverlay::TriangulationMode GeoZoneOverlay::triangulateZone(ZoneRenderData
     return zone.triangleVertices.isEmpty() ? TriangulationMode::Failed : triangulationMode;
 }
 
-QSGNode* GeoZoneOverlay::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePaintNodeData* /*updatePaintNodeData*/)
+QSGNode* GeoZoneOverlay::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePaintNodeData*)
 {
     if (!_map || !_model) {
         delete oldNode;
