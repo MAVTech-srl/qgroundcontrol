@@ -24,6 +24,7 @@ CPMAddPackage(
     VERSION 2.0.1
     GIT_TAG Clipper2_2.0.1
     GITHUB_REPOSITORY AngusJohnson/Clipper2
+    GIT_TAG Clipper2_2.0.1
     OPTIONS
         "BUILD_APPS OFF"
         "BUILD_TESTING OFF"
