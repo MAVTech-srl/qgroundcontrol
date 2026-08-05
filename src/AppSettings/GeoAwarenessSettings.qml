@@ -46,7 +46,7 @@ Item {
                         visible:            true
                         Layout.fillWidth:   true
                         readOnly:           true
-                        text:               _mapAirspaceJsonFilePath.rawValue
+                        text:               _mapAirspaceJsonFilePath.rawValue == "" ? qsTr("Please select a JSON file") : _mapAirspaceJsonFilePath.rawValue
                     }
                 }
 
@@ -58,8 +58,8 @@ Item {
                         text: qsTr("Clear")
 
                         onClicked: {
-                            airspaceFileTextField.text = "Please select a JSON file"
-                            _mapAirspaceJsonFilePath.value = airspaceFileTextField.text
+                            _mapAirspaceJsonFilePath.value = ""
+                            fileDialogAirspace.folder = ""
                             QGroundControl.geoZoneManager.loadFromFile("")
                             QGroundControl.geoZoneManager.clipAllZones()
                         }
@@ -69,12 +69,17 @@ Item {
                         text: qsTr("Select File")
 
                         onClicked: {
-                            var filename = _mapAirspaceJsonFilePath.rawValue;
-                            const found = filename.match(/(.*)[\/\\]/);
-                            if(found){
-                                filename = found[1]||''; // extracting the directory from the file path
-                                fileDialogAirspace.folder = (filename[0] === "/")?(filename.slice(1)):(filename);
+                            const filename = _mapAirspaceJsonFilePath.rawValue;
+
+                            if (filename && !filename.startsWith("content://")) {
+                                const found = filename.match(/(.*)[\/\\]/);
+                                if (found) {
+                                    fileDialogAirspace.folder = found[1];
+                                }
+                            } else {
+                                fileDialogAirspace.folder = "";
                             }
+
                             fileDialogAirspace.openForLoad()
                         }
 
