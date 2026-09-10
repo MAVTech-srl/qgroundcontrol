@@ -47,11 +47,6 @@ double normalizeDeltaLongitude(double deltaLongitude)
     return std::remainder(deltaLongitude, 360.0);
 }
 
-bool intervalIntersects(double minA, double maxA, double minB, double maxB)
-{
-    return !(maxA < minB || minA > maxB);
-}
-
 constexpr int kOverlayAlpha = static_cast<int>(0.4f * 255.0f);
 constexpr int kOutlineAlpha = 0;
 

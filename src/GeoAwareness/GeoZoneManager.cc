@@ -221,7 +221,7 @@ void GeoZoneManager::clipAllZones()
 
         // Find indexes of intersecting zones
         QList<int> intersectingIndexes;
-        int intersectingZoneNumber = _zoneTree.Search(_zones[i].minLonLat, _zones[i].maxLonLat, [this, &intersectingIndexes](const int& index) {
+        _zoneTree.Search(_zones[i].minLonLat, _zones[i].maxLonLat, [this, &intersectingIndexes](const int& index) {
             intersectingIndexes.push_back(index);
             return true; // continue searching
         });
