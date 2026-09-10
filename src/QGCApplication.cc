@@ -307,6 +307,7 @@ void QGCApplication::_initForNormalAppBoot()
     QGCPositionManager::instance()->init();
     NTRIPManager::instance()->init();
     LinkManager::instance()->init();
+    GeoZoneManager::instance()->init();
     VideoManager::instance()->init(mainRootWindow());
 
     // Set the window icon now that custom plugin has a chance to override it
