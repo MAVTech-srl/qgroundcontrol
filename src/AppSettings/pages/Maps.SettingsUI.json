@@ -26,6 +26,16 @@
             ]
         },
         {
+            "component": "GeoAwarenessSettings",
+            "sectionName": "Geo-Awareness",
+            "keywords": [
+                "geo-awareness",
+                "airspace",
+                "restrictions",
+                "easa"
+            ]
+        },
+        {
             "heading": "Tokens",
             "keywords": ["token", "api key", "tianditu", "mapbox", "esri", "vworld", "openaip"],
             "headingDescription": "qsTr(\"Allows access to additional providers\")",
