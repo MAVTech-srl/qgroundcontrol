@@ -11,6 +11,7 @@
 
 class ADSBVehicleManager;
 class FactGroup;
+class GeoZoneManager;
 class LinkManager;
 class MAVLinkSigningKeys;
 class MissionCommandTree;
@@ -27,6 +28,7 @@ class QmlObjectListModel;
 Q_MOC_INCLUDE("ADSBVehicleManager.h")
 Q_MOC_INCLUDE("NTRIPManager.h")
 Q_MOC_INCLUDE("FactGroup.h")
+Q_MOC_INCLUDE("GeoZoneManager.h")
 Q_MOC_INCLUDE("LinkManager.h")
 Q_MOC_INCLUDE("MAVLinkSigningKeys.h")
 Q_MOC_INCLUDE("MissionCommandTree.h")
@@ -69,6 +71,7 @@ public:
     Q_PROPERTY(SettingsManager*     settingsManager         READ    settingsManager         CONSTANT)
     Q_PROPERTY(ADSBVehicleManager*  adsbVehicleManager      READ    adsbVehicleManager      CONSTANT)
     Q_PROPERTY(NTRIPManager*        ntripManager            READ    ntripManager            CONSTANT)
+    Q_PROPERTY(GeoZoneManager*      geoZoneManager          READ    geoZoneManager          CONSTANT)
     Q_PROPERTY(QGCCorePlugin*       corePlugin              READ    corePlugin              CONSTANT)
     Q_PROPERTY(MissionCommandTree*  missionCommandTree      READ    missionCommandTree      CONSTANT)
     Q_PROPERTY(MAVLinkSigningKeys*   mavlinkSigningKeys      READ    mavlinkSigningKeys      CONSTANT)
@@ -167,6 +170,7 @@ public:
 #endif
     ADSBVehicleManager*     adsbVehicleManager  ()  { return _adsbVehicleManager; }
     NTRIPManager*           ntripManager        ()  { return _ntripManager; }
+    GeoZoneManager*         geoZoneManager      ()  { return _geoZoneManager; }
     QmlUnitsConversion*     unitsConversion     ()  { return &_unitsConversion; }
     static QGeoCoordinate   flightMapPosition   ()  { return _coord; }
     static double           flightMapZoom       ()  { return _zoom; }
@@ -212,6 +216,7 @@ private:
     QGCMapEngineManager*    _mapEngineManager       = nullptr;
     ADSBVehicleManager*     _adsbVehicleManager     = nullptr;
     NTRIPManager*           _ntripManager           = nullptr;
+    GeoZoneManager*         _geoZoneManager         = nullptr;
     QGCPositionManager*     _qgcPositionManager     = nullptr;
     MissionCommandTree*     _missionCommandTree     = nullptr;
     MAVLinkSigningKeys*     _mavlinkSigningKeys     = nullptr;
