@@ -267,4 +267,12 @@ Map {
             }
         }
     }
+
+    // Geofence visuals
+    GeoZoneOverlay {
+        anchors.fill: parent
+        map: _map
+        model: QGroundControl.geoZoneManager.model
+        visible: QGroundControl.settingsManager.flightMapSettings.showAirspaceOverlay.rawValue
+    }
 } // Map

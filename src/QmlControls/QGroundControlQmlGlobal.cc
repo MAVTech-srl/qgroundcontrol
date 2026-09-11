@@ -13,6 +13,7 @@
 #include "AudioOutput.h"
 #include "NTRIPManager.h"
 #include "MAVLinkSigningKeys.h"
+#include "GeoZoneManager.h"
 #include "MissionCommandTree.h"
 #include "VideoManager.h"
 #include "MultiVehicleManager.h"
@@ -42,6 +43,7 @@ QGroundControlQmlGlobal::QGroundControlQmlGlobal(QObject *parent)
     , _mapEngineManager(QGCMapEngineManager::instance())
     , _adsbVehicleManager(ADSBVehicleManager::instance())
     , _ntripManager(NTRIPManager::instance())
+    , _geoZoneManager(GeoZoneManager::instance())
     , _qgcPositionManager(QGCPositionManager::instance())
     , _missionCommandTree(MissionCommandTree::instance())
     , _mavlinkSigningKeys(MAVLinkSigningKeys::instance())
