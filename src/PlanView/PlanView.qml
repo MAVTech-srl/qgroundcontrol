@@ -520,6 +520,12 @@ Item {
                         iconSource: "/res/chevron-double-right.svg"
                         visible: missionStatus.hidden && QGroundControl.corePlugin.options.showMissionStatus
                         onTriggered: missionStatus.showMissionStatus()
+                    },
+                    ToolStripAction {
+                        text: qsTr("Overlay")
+                        iconSource: QGroundControl.settingsManager.flightMapSettings.showAirspaceOverlay.rawValue ? "qrc:/InstrumentValueIcons/view-hide.svg" : "qrc:/InstrumentValueIcons/view-show.svg"
+                        visible: QGroundControl.geoZoneManager.count > 0
+                        onTriggered: QGroundControl.settingsManager.flightMapSettings.showAirspaceOverlay.rawValue = !QGroundControl.settingsManager.flightMapSettings.showAirspaceOverlay.rawValue
                     }
                 ]
             }
