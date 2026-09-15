@@ -26,6 +26,11 @@ def test_build_matrix_non_pr_includes_all_legs() -> None:
     assert build_matrix(is_pr=False) == [LINUX_JOB, MAC_JOB, WINDOWS_JOB, LINUX_EMULATOR_JOB]
 
 
+def test_build_matrix_primary_only_skips_secondary_legs() -> None:
+    assert build_matrix(is_pr=False, primary_only=True) == [LINUX_JOB]
+    assert build_matrix(is_pr=True, primary_only=True) == [LINUX_JOB]
+
+
 def test_legs_carry_runner_fields() -> None:
     for leg in build_matrix(is_pr=False):
         assert "runson_runner" in leg
