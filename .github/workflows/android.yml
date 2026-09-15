@@ -21,9 +21,21 @@ on:
         options:
           - Release
           - Debug
+  workflow_call:
+    inputs:
+      concurrency-suffix:
+        description: 'Extra concurrency-group suffix set by callers to avoid colliding with sibling reusable calls'
+        required: false
+        default: ''
+        type: string
+      primary-only:
+        description: 'Build only the primary (linux) APK leg, skipping mac/windows/emulator legs (used by release.yml)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow_ref }}-${{ github.ref }}-${{ inputs.concurrency-suffix }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 permissions:
@@ -62,6 +74,7 @@ jobs:
         id: build
         env:
           IS_PR: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+          PRIMARY_ONLY: ${{ inputs.primary-only && '1' || '0' }}
         run: python3 .github/scripts/android_matrix.py
 
   build:
@@ -252,7 +265,7 @@ jobs:
         uses: ./.github/actions/android-emulator-test
         with:
           apk-path: ${{ runner.temp }}/build/${{ env.PACKAGE }}.apk
-          package: org.mavlink.qgroundcontrol
+          package: org.mavtech.qgroundcontrol
           android-platform: ${{ steps.setup.outputs.android_platform }}
           qt-version: ${{ steps.setup.outputs.qt_version }}
           ndk-version: ${{ steps.setup.outputs.android_ndk_full_version }}
