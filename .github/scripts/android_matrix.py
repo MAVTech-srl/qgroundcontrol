@@ -73,8 +73,10 @@ LINUX_EMULATOR_JOB: Leg = {
 }
 
 
-def build_matrix(is_pr: bool) -> list[Leg]:
+def build_matrix(is_pr: bool, primary_only: bool = False) -> list[Leg]:
     """Return the matrix include-list for the given event type."""
+    if primary_only:
+        return [LINUX_JOB]
     legs = [LINUX_JOB, MAC_JOB, WINDOWS_JOB, LINUX_EMULATOR_JOB]
     if is_pr:
         legs.remove(WINDOWS_JOB)
@@ -88,9 +90,14 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("IS_PR", "0"),
         help="'1'/'true' for PR builds (default from $IS_PR)",
     )
+    parser.add_argument(
+        "--primary-only",
+        default=os.environ.get("PRIMARY_ONLY", "0"),
+        help="'1'/'true' to build only the primary (linux) leg, e.g. for release.yml",
+    )
     args = parser.parse_args(argv)
 
-    include = build_matrix(parse_bool(args.is_pr))
+    include = build_matrix(parse_bool(args.is_pr), parse_bool(args.primary_only))
     serialized = json.dumps(include, separators=(",", ":"))
     write_github_output({"include": serialized})
     print(f"include={serialized}")
