@@ -122,29 +122,6 @@ endif()
 # cmake_print_variables(QGC_APP_VERSION)
 
 # ----------------------------------------------------------------------------
-# Extract Commit Date for Version Timestamp
-# ----------------------------------------------------------------------------
-
-if(QGC_STABLE_BUILD)
-    set(QGC_APP_DATE_VERSION "${QGC_APP_VERSION}")
-else()
-    # Daily builds use date of last commit
-    set(QGC_APP_DATE_VERSION "")
-endif()
-
-execute_process(
-    COMMAND ${GIT_EXECUTABLE} log -1 --format=%aI ${QGC_APP_DATE_VERSION}
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    OUTPUT_VARIABLE QGC_APP_DATE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-)
-if(NOT QGC_APP_DATE)
-    string(TIMESTAMP QGC_APP_DATE "%Y-%m-%dT%H:%M:%S%z" UTC)
-endif()
-# cmake_print_variables(QGC_APP_DATE)
-
-# ----------------------------------------------------------------------------
 # Parse Version Components (Major.Minor.Patch)
 # ----------------------------------------------------------------------------
 # Strip 'v' prefix if present (e.g., v1.2.3 -> 1.2.3)
@@ -165,6 +142,32 @@ else()
     set(QGC_APP_VERSION_PATCH "0")
 endif()
 # cmake_print_variables(QGC_APP_VERSION QGC_APP_VERSION_MAJOR QGC_APP_VERSION_MINOR QGC_APP_VERSION_PATCH)
+
+# ----------------------------------------------------------------------------
+# MAVTech Version and Date Overrides
+# ----------------------------------------------------------------------------
+execute_process(
+    COMMAND ${GIT_EXECUTABLE} for-each-ref
+        "--format=%(refname:strip=3)"
+        "--sort=-version:refname"
+        "refs/remotes/origin/Stable_V*"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE _latest_stable_branch
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+string(REGEX REPLACE "\n.*" "" _latest_stable_branch "${_latest_stable_branch}")
+
+if(_latest_stable_branch MATCHES "^Stable_V([0-9]+\\.[0-9]+)$")
+    string(REGEX REPLACE "^Stable_V" "v" _mavtech_base_version "${_latest_stable_branch}")
+    string(TIMESTAMP _mavtech_date "%Y%m%d" UTC)
+    set(QGC_APP_VERSION_STR "${_mavtech_base_version}-mavtech.${_mavtech_date}")
+    message(STATUS "Set QGC_APP_VERSION_STR to ${QGC_APP_VERSION_STR}")
+else()
+    message(FATAL_ERROR "Could not resove latest StableVX.Y branch")
+endif()
+
+string(TIMESTAMP QGC_APP_DATE "%Y-%m-%d" UTC)
 
 # ----------------------------------------------------------------------------
 # Generate Version Header
