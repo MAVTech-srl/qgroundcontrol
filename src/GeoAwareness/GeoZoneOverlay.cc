@@ -153,10 +153,6 @@ void GeoZoneOverlay::rebuildZoneCache()
 
     const int zoneCount = _model->rowCount();
     _zoneCache.reserve(zoneCount);
-    int triangulatedWithHoles = 0;
-    int triangulatedOuterOnly = 0;
-    int triangulatedFanFallback = 0;
-    int triangulationFailed = 0;
 
     for (int row = 0; row < zoneCount; ++row) {
         const QModelIndex index = _model->index(row, 0);
@@ -235,20 +231,6 @@ void GeoZoneOverlay::rebuildZoneCache()
         }
 
         zone.triangulationMode = triangulateZone(zone);
-        switch (zone.triangulationMode) {
-        case TriangulationMode::WithHoles:
-            triangulatedWithHoles++;
-            break;
-        case TriangulationMode::OuterOnly:
-            triangulatedOuterOnly++;
-            break;
-        case TriangulationMode::FanFallback:
-            triangulatedFanFallback++;
-            break;
-        case TriangulationMode::Failed:
-            triangulationFailed++;
-            break;
-        }
 
         _zoneCache.append(zone);
     }
