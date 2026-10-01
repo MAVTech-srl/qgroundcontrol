@@ -94,7 +94,6 @@ void ToolbarIndicatorUITest::_runIndicatorTest(
         { "toolbar_flightModeIndicator",    "FlightMode",   true  },
         { "toolbar_gpsIndicator",           "GPS",          true  },
         { "toolbar_batteryIndicator",       "Battery",      true  },
-        { "toolbar_remoteIDIndicator",      "RemoteID",     true  },
         { "toolbar_gimbalIndicator",        "Gimbal",       true  },
         { "toolbar_escIndicator",           "ESC",          false },
         { "toolbar_telemetryRSSIIndicator", "TelemetryRSSI",false },
@@ -110,6 +109,8 @@ void ToolbarIndicatorUITest::_runIndicatorTest(
         QVERIFY2(_exerciseIndicator(item, displayName, spec.expectExpand),
                  qPrintable(QStringLiteral("%1: exercise failed").arg(displayName)));
     }
+    QVERIFY2(!findVisibleItem(_rootItem, QStringLiteral("toolbar_remoteIDIndicator")),
+             qPrintable(QStringLiteral("%1: Remote ID indicator should be hidden").arg(vehicleName)));
     });
 }
 
