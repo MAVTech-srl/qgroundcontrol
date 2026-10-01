@@ -140,7 +140,7 @@ void TopLevelViewsTest::_testNavigateViews()
         const QStringList settingsPages = {
             QStringLiteral("General"),        QStringLiteral("Fly View"),   QStringLiteral("Plan View"),
             QStringLiteral("ADSB Server"),    QStringLiteral("Comm Links"), QStringLiteral("App Logging"),
-            QStringLiteral("App Log Viewer"), QStringLiteral("Maps"),       QStringLiteral("Remote ID"),
+            QStringLiteral("App Log Viewer"), QStringLiteral("Maps"),
             QStringLiteral("Telemetry"),      QStringLiteral("Video"),      QStringLiteral("Help"),
         };
 

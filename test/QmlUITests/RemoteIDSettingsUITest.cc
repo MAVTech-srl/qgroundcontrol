@@ -1,5 +1,6 @@
 #include "RemoteIDSettingsUITest.h"
 
+#include <QtCore/QUrl>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/QQuickWindow>
 #include <QtTest/QTest>
@@ -63,16 +64,14 @@ bool RemoteIDSettingsUITest::_navigateToRemoteIDPage()
         return false;
     }
 
-    QQuickItem* btn = findVisibleItem(_rootItem, QStringLiteral("settingsButton_Remote ID"));
-    if (!btn) {
-        QTest::qFail("Settings page button not found: settingsButton_Remote ID", __FILE__, __LINE__);
+    QQuickItem* settingsLoader = findVisibleItem(_rootItem, QStringLiteral("settings_rightPanel"));
+    if (!settingsLoader) {
+        QTest::qFail("Settings page loader not found", __FILE__, __LINE__);
         return false;
     }
 
-    scrollIntoView(btn, QStringLiteral("settings_buttonList"));
-
-    const QPointF center = btn->mapToScene(QPointF(btn->width() / 2, btn->height() / 2));
-    QTest::mouseClick(_window, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+    settingsLoader->setProperty(
+        "source", QUrl(QStringLiteral("qrc:/qml/QGroundControl/AppSettings/RemoteIDSettings.qml")));
     QTest::qWait(_pageDelay);
 
     if (!findVisibleItem(_rootItem, QStringLiteral("settingsPage_RemoteID"))) {

@@ -13,7 +13,7 @@ Item {
     anchors.top:    parent.top
     anchors.bottom: parent.bottom
 
-    property bool   showIndicator:      remoteIDManager.available
+    property bool   showIndicator:      false // Override to hide RemoteID
 
     property var    activeVehicle:      QGroundControl.multiVehicleManager.activeVehicle
     property var    remoteIDManager:    activeVehicle ? activeVehicle.remoteIDManager : null
