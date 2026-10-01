@@ -59,7 +59,7 @@ Item {
 
                         onClicked: {
                             _mapAirspaceJsonFilePath.value = ""
-                            fileDialogAirspace.folder = ""
+                            fileDialogAirspace.folder = root._appSettings.missionSavePath
                             QGroundControl.geoZoneManager.loadFromFile("")
                             QGroundControl.geoZoneManager.clipAllZones()
                         }
@@ -69,15 +69,19 @@ Item {
                         text: qsTr("Select File")
 
                         onClicked: {
-                            const filename = _mapAirspaceJsonFilePath.rawValue;
-
-                            if (filename && !filename.startsWith("content://")) {
-                                const found = filename.match(/(.*)[\/\\]/);
-                                if (found) {
-                                    fileDialogAirspace.folder = found[1];
-                                }
+                            if (Qt.platform.os === "android") {
+                                fileDialogAirspace.folder = root._appSettings.missionSavePath;
                             } else {
-                                fileDialogAirspace.folder = "";
+                                const filename = _mapAirspaceJsonFilePath.rawValue;
+
+                                if (filename && !filename.startsWith("content://")) {
+                                    const found = filename.match(/(.*)[\/\\]/);
+                                    if (found) {
+                                        fileDialogAirspace.folder = found[1];
+                                    }
+                                } else {
+                                    fileDialogAirspace.folder = root._appSettings.missionSavePath;
+                                }
                             }
 
                             fileDialogAirspace.openForLoad()
@@ -85,10 +89,12 @@ Item {
 
                         QGCFileDialog {
                             id:             fileDialogAirspace
+                            folder:         root._appSettings.missionSavePath
                             nameFilters:    [qsTr("JSON Files (*.json)")]
                             title:          qsTr("Select Airspace File")
 
                             onAcceptedForLoad: (file) => {
+                                console.warn("Selected airspace file: " + file)
                                 airspaceFileTextField.text = file
                                 _mapAirspaceJsonFilePath.value = airspaceFileTextField.text
                                 QGroundControl.geoZoneManager.loadFromFile(airspaceFileTextField.text)
