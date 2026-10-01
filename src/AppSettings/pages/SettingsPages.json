@@ -77,7 +77,8 @@
             "name": "Remote ID",
             "qml": "RemoteIDSettings.qml",
             "icon": "qrc:/qmlimages/RidIconManNoID.svg",
-            "pageDefinition": "RemoteID.SettingsUI.json"
+            "pageDefinition": "RemoteID.SettingsUI.json",
+            "visible": "false"
         },
         {
             "name": "Telemetry",
