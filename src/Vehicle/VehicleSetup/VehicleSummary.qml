@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -15,6 +17,7 @@ Rectangle {
     property real _minSummaryW:     ScreenTools.isTinyScreen ? ScreenTools.defaultFontPixelWidth * 28 : ScreenTools.defaultFontPixelWidth * 36
     property real _summaryBoxSpace: ScreenTools.defaultFontPixelWidth * 2
     property real _margins:        ScreenTools.defaultFontPixelHeight / 2
+    property var  setupView: null
 
     function capitalizeWords(sentence) {
         return sentence.replace(/(?:^|\s)\S/g, function(a) { return a.toUpperCase(); });
@@ -62,13 +65,15 @@ Rectangle {
 
                     // Outer summary item rectangle
                     Rectangle {
+                        required property var modelData
+
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         implicitWidth: _minSummaryW
                         implicitHeight: mainLayout.implicitHeight + (_margins * 2)
                         radius: ScreenTools.defaultFontPixelHeight / 4
                         color: qgcPal.windowShade
-                        visible: setupView._componentAllowed(modelData) && modelData.summaryQmlSource.toString() !== ""
+                        visible: _summaryRoot.setupView && _summaryRoot.setupView._componentAllowed(modelData) && modelData.summaryQmlSource.toString() !== ""
                         border.width: 1
                         border.color: Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.1)
 
@@ -103,8 +108,8 @@ Rectangle {
                                 }
 
                                 onClicked : {
-                                    if (modelData.setupSource !== "") {
-                                        setupView.showVehicleComponentPanel(modelData)
+                                    if (_summaryRoot.setupView && modelData.setupSource !== "") {
+                                        _summaryRoot.setupView.showVehicleComponentPanel(modelData)
                                     }
                                 }
                             }
@@ -115,7 +120,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: item ? item.implicitWidth : 0
                                 Layout.preferredHeight: item ? item.implicitHeight : 0
-                                source: setupView._componentAllowed(modelData) ? modelData.summaryQmlSource : ""
+                                source: _summaryRoot.setupView && _summaryRoot.setupView._componentAllowed(modelData) ? modelData.summaryQmlSource : ""
 
                                 property var vehicleComponent: modelData
                             }

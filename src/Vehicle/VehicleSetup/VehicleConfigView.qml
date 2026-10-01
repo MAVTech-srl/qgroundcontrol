@@ -278,6 +278,9 @@ Rectangle {
     Connections {
         target: panelLoader
         function onLoaded() {
+            if (panelLoader.item && panelLoader.source.toString().endsWith("VehicleSummary.qml")) {
+                panelLoader.item.setupView = vehicleConfigView
+            }
             if (panelLoader.item && typeof panelLoader.item.sectionIdFilter !== "undefined") {
                 panelLoader.item.sectionIdFilter = _sectionId(_selectedComponentIndex, _selectedSectionIndex)
             }
