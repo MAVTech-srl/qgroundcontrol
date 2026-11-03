@@ -10,19 +10,23 @@
 #pragma once
 
 #include "clipper.h"
-#include "RTree.h"
 
 #include <QObject>
 #include <QAbstractListModel>
 #include <QGeoCoordinate>
 #include <QColor>
 #include <QList>
+#include <QFutureWatcher>
+
+#include <atomic>
+#include <memory>
 
 class GeoZoneManager : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QAbstractListModel* model READ model CONSTANT)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
 
 public:
     explicit GeoZoneManager(QObject* parent = nullptr);
@@ -33,12 +37,14 @@ public:
 
     QAbstractListModel* model();
     int count() const { return _zones.count(); }
+    bool loading() const { return _loading; }
 
+    /// Parses and clips the zones of the file on a worker thread, an empty path clears all zones.
     Q_INVOKABLE void loadFromFile(const QString& path);
-    Q_INVOKABLE void clipAllZones();
 
 signals:
     void countChanged();
+    void loadingChanged();
 
 public slots:
     void init();
@@ -56,8 +62,8 @@ private:
         double minAltitude = 0;
         double maxAltitude = 120;
         // Cached bounding box for future intersection tests
-        double minLonLat[2];
-        double maxLonLat[2];
+        double minLonLat[2] = {0, 0};
+        double maxLonLat[2] = {0, 0};
         // Whether this zone has already been clipped by altitude layers
         bool alreadyClipped = false;
         
@@ -71,9 +77,18 @@ private:
         }
     };
 
-    Clipper2Lib::PathsD geoZoneToClipperPaths(const QList<QGeoCoordinate>& polygon, const QList<QList<QGeoCoordinate>>& holes = {});
-    QList<QGeoCoordinate> clipperPathToGeoZone(const Clipper2Lib::PathD& path);
-    void insertZoneIntoTree(GeoZone& zone, int index);
+    using CancelFlag = std::shared_ptr<std::atomic_bool>;
+
+    // These run on worker threads and must not touch any member state
+    static QList<GeoZone> parseFile(const QString& path, const CancelFlag& cancel);
+    static QList<GeoZone> clipZones(const QList<GeoZone>& zones, const CancelFlag& cancel);
+    static QList<GeoZone> clipCluster(const QList<GeoZone>& zones, const CancelFlag& cancel);
+    static Clipper2Lib::PathsD geoZoneToClipperPaths(const QList<QGeoCoordinate>& polygon, const QList<QList<QGeoCoordinate>>& holes = {});
+    static QList<QGeoCoordinate> clipperPathToGeoZone(const Clipper2Lib::PathD& path);
+    static void updateBoundingBox(GeoZone& zone);
+
+    void _onLoadFinished();
+    void _setLoading(bool loading);
 
     // -----------------------------
     // Model exposed to QML
@@ -152,8 +167,7 @@ private:
 private:
     GeoZoneModel _model;
     QList<GeoZone> _zones;
-    int displayedZone = 0;
-    QList<int> _lastViewportZoneIndexes; // TODO: remove these unless really needed
-    bool _hasViewportZoneCache = false;
-    RTree<int, double, 2> _zoneTree;
+    QFutureWatcher<QList<GeoZone>> _loadWatcher;
+    CancelFlag _cancelLoad;
+    bool _loading = false;
 };

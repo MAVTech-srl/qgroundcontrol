@@ -18,6 +18,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QtConcurrent>
+#include <QElapsedTimer>
+#include <numeric>
+#include <vector>
 #include <algorithm>
 #include <QtQml/qqml.h>
 
@@ -27,10 +31,15 @@ Q_APPLICATION_STATIC(GeoZoneManager, _geoZoneManager);
 
 GeoZoneManager::GeoZoneManager(QObject* parent): QObject(parent)
 {
+    connect(&_loadWatcher, &QFutureWatcher<QList<GeoZone>>::finished, this, &GeoZoneManager::_onLoadFinished);
 }
 
 GeoZoneManager::~GeoZoneManager()
 {
+    if (_cancelLoad) {
+        _cancelLoad->store(true);
+    }
+    _loadWatcher.waitForFinished();
 }
 
 void GeoZoneManager::init()
@@ -38,7 +47,6 @@ void GeoZoneManager::init()
     Fact* airspaceFileFact = SettingsManager::instance()->flightMapSettings()->airspaceFilePath();
     QString path = airspaceFileFact->rawValue().toString();
     loadFromFile(path);
-    clipAllZones();
 }
 
 QAbstractListModel* GeoZoneManager::model()
@@ -106,80 +114,113 @@ QList<QGeoCoordinate> GeoZoneManager::clipperPathToGeoZone(const Clipper2Lib::Pa
     return result;
 }
 
+void GeoZoneManager::_setLoading(bool loading)
+{
+    if (_loading != loading) {
+        _loading = loading;
+        emit loadingChanged();
+    }
+}
+
 void GeoZoneManager::loadFromFile(const QString& path)
 {
-    // Clear existing zones
-    _model.setZones({});
-    _zones = {};
-    _zoneTree.RemoveAll();
+    // Abandon any load still in flight; its result is never applied
+    if (_cancelLoad) {
+        _cancelLoad->store(true);
+    }
+    _cancelLoad.reset();
+    _loadWatcher.setFuture(QFuture<QList<GeoZone>>());
 
-    // Terminate if clearing was the goal
+    _zones = {};
+    _model.setZones({});
+    emit countChanged();
+
     if (path.isEmpty()) {
         qDebug() << "Cleared GeoZones";
-        emit countChanged();
+        _setLoading(false);
         return;
     }
 
-    // Load file
+    const CancelFlag cancel = std::make_shared<std::atomic_bool>(false);
+    _cancelLoad = cancel;
+    _setLoading(true);
+
+    _loadWatcher.setFuture(QtConcurrent::run([path, cancel]() {
+        QElapsedTimer timer;
+        timer.start();
+        const QList<GeoZone> parsed = parseFile(path, cancel);
+        qDebug() << "Parsed" << parsed.size() << "GeoZones in " << timer.restart() << "ms";
+        const QList<GeoZone> clipped = clipZones(parsed, cancel);
+        qDebug() << "Clipped to" << clipped.size() << "GeoZones in " << timer.elapsed() << "ms";
+        return clipped;
+    }));
+}
+
+void GeoZoneManager::_onLoadFinished()
+{
+    if (!_cancelLoad || _cancelLoad->load()) {
+        return;
+    }
+
+    _zones = _loadWatcher.result();
+    _model.setZones(_zones);
+    _cancelLoad.reset();
+    emit countChanged();
+    _setLoading(false);
+}
+
+QList<GeoZoneManager::GeoZone> GeoZoneManager::parseFile(const QString& path, const CancelFlag& cancel)
+{
     QFile file(path);
-    qDebug() << "Loading file " << path;
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning() << "Failed to open GeoZone file: " << path;
-        return;
+        return {};
     }
 
-    // Get "features" array
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    QJsonArray features = doc.object()["features"].toArray();
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    const QJsonArray features = doc.object()["features"].toArray();
     qDebug() << "Loaded " << features.size() << " features from file";
 
-    QList<GeoZone> zones;
+    QList<int> featureIndexes(features.size());
+    std::iota(featureIndexes.begin(), featureIndexes.end(), 0);
 
-    // Iterate features and convert to GeoZones
-    int index = 0;
-    for (const auto& fVal : features) {
-        QJsonObject fObj = fVal.toObject();
-
-        QString id = fObj["identifier"].toString();
-        QString name = fObj["name"].toString();
-
-        QJsonArray geometryArray = fObj["geometry"].toArray();
-        if (geometryArray.isEmpty()) {
-            continue;
+    // Features are independent and the parsed document is read-only, so they can be converted in parallel
+    const auto parseFeature = [&features, &cancel](int featureIndex) {
+        QList<GeoZone> zones;
+        if (cancel->load()) {
+            return zones;
         }
 
+        const QJsonObject fObj = features[featureIndex].toObject();
+        const QString id = fObj["identifier"].toString();
+        const QString name = fObj["name"].toString();
+
         // Some zones are split over multiple geometries (separated by higher priority zones), we need to add each geometry as its own zone and type
-        QJsonObject zoneGeometry;
+        const QJsonArray geometryArray = fObj["geometry"].toArray();
         for (const auto& geometry : geometryArray) {
-            zoneGeometry = geometry.toObject();
+            const QJsonObject zoneGeometry = geometry.toObject();
             GeoZone zone;
             zone.id = id;
             zone.name = name;
-
-            // Altitude
             zone.minAltitude = zoneGeometry["lowerLimit"].toDouble();
             zone.maxAltitude = zoneGeometry["upperLimit"].toDouble();
 
-            // Horizontal projection
-            QJsonObject proj = zoneGeometry["horizontalProjection"].toObject();
-            QJsonArray coordinateLists = proj["coordinates"].toArray();
-
+            const QJsonArray coordinateLists = zoneGeometry["horizontalProjection"].toObject()["coordinates"].toArray();
             if (coordinateLists.isEmpty()) {
                 continue;
             }
 
             // Handle first polygon of the geometry object as the Polygon, the second (if present) as the Hole
             for (int i = 0; i < coordinateLists.size(); i++) {
-                QJsonArray coordList = coordinateLists[i].toArray();
+                const QJsonArray coordList = coordinateLists[i].toArray();
                 QList<QGeoCoordinate> geoCoordinates;
+                geoCoordinates.reserve(coordList.size());
                 for (const auto& coord : coordList) {
-                    QJsonArray point = coord.toArray();
+                    const QJsonArray point = coord.toArray();
                     if (point.size() < 2) {
                         continue;
                     }
-                    double lon = point[0].toDouble();
-                    double lat = point[1].toDouble();
-                    geoCoordinates.append(QGeoCoordinate(lat, lon));
+                    geoCoordinates.append(QGeoCoordinate(point[1].toDouble(), point[0].toDouble()));
                 }
 
                 if (i == 0) {
@@ -194,75 +235,148 @@ void GeoZoneManager::loadFromFile(const QString& path)
                 continue;
             }
 
-            insertZoneIntoTree(zone, index++);
+            updateBoundingBox(zone);
             zones.append(zone);
         }
-    }
 
-    qDebug() << "Parsed " << zones.size() << " GeoZones";
-    _zones = zones;
-    _model.setZones(zones);
+        return zones;
+    };
+
+    const QList<QList<GeoZone>> perFeature = QtConcurrent::blockingMapped(featureIndexes, parseFeature);
+
+    QList<GeoZone> zones;
+    for (const QList<GeoZone>& featureZones : perFeature) {
+        zones.append(featureZones);
+    }
+    return zones;
 }
 
-void GeoZoneManager::clipAllZones()
+QList<GeoZoneManager::GeoZone> GeoZoneManager::clipZones(const QList<GeoZone>& zones, const CancelFlag& cancel)
 {
-    if (_zones.isEmpty()) {
-        qDebug() << "No zones to clip";
-        return;
+    if (zones.isEmpty()) {
+        return {};
     }
 
-    qDebug() << "Clipping all Zones";
-    // Iterate through all zones and clip them based on altitude layers
-    for (int i = 0; i < _zones.size(); i++) {
-        // Skip already clipped zones
-        if (_zones[i].alreadyClipped) {
+    // Clipping only ever shrinks a zone, so zones interact only if their original bounding boxes overlap.
+    // Group them into connected clusters which can be clipped independently (and in parallel).
+    RTree<int, double, 2> tree;
+    for (int i = 0; i < zones.size(); i++) {
+        tree.Insert(zones[i].minLonLat, zones[i].maxLonLat, i);
+    }
+
+    std::vector<int> parent(zones.size());
+    std::iota(parent.begin(), parent.end(), 0);
+    const auto findRoot = [&parent](int i) {
+        while (parent[i] != i) {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        return i;
+    };
+
+    for (int i = 0; i < zones.size(); i++) {
+        tree.Search(zones[i].minLonLat, zones[i].maxLonLat, [&](const int& j) {
+            const int rootI = findRoot(i);
+            const int rootJ = findRoot(j);
+            if (rootI != rootJ) {
+                parent[std::max(rootI, rootJ)] = std::min(rootI, rootJ);
+            }
+            return true;
+        });
+    }
+
+    // Zones keep their relative order within a cluster, which preserves the sequential clipping semantics
+    QHash<int, int> clusterOfRoot;
+    QList<QList<GeoZone>> clusters;
+    for (int i = 0; i < zones.size(); i++) {
+        const int root = findRoot(i);
+        auto it = clusterOfRoot.find(root);
+        if (it == clusterOfRoot.end()) {
+            it = clusterOfRoot.insert(root, clusters.size());
+            clusters.append(QList<GeoZone>());
+        }
+        clusters[it.value()].append(zones[i]);
+    }
+
+    // Largest clusters first so the pool isn't left waiting on one big job at the end
+    std::sort(clusters.begin(), clusters.end(), [](const QList<GeoZone>& a, const QList<GeoZone>& b) {
+        return a.size() > b.size();
+    });
+
+    const QList<QList<GeoZone>> clipped = QtConcurrent::blockingMapped(clusters, [&cancel](const QList<GeoZone>& cluster) {
+        return clipCluster(cluster, cancel);
+    });
+
+    QList<GeoZone> result;
+    result.reserve(zones.size());
+    for (const QList<GeoZone>& cluster : clipped) {
+        result.append(cluster);
+    }
+    return result;
+}
+
+QList<GeoZoneManager::GeoZone> GeoZoneManager::clipCluster(const QList<GeoZone>& clusterZones, const CancelFlag& cancel)
+{
+    if (clusterZones.size() < 2) {
+        return clusterZones;
+    }
+
+    QList<GeoZone> zones = clusterZones;
+    RTree<int, double, 2> tree;
+    // Clipper paths are cached per zone since each zone is used as clip path by many others
+    std::vector<Clipper2Lib::PathsD> clipperPaths;
+    clipperPaths.reserve(zones.size());
+    for (int i = 0; i < zones.size(); i++) {
+        tree.Insert(zones[i].minLonLat, zones[i].maxLonLat, i);
+        clipperPaths.push_back(geoZoneToClipperPaths(zones[i].polygon, zones[i].holes));
+    }
+
+    // Clip each zone against intersecting zones of equal or higher priority (lower minAltitude)
+    for (int i = 0; i < zones.size(); i++) {
+        if (cancel->load()) {
+            return {};
+        }
+
+        if (zones[i].alreadyClipped) {
             continue;
         }
 
         // Find indexes of intersecting zones
         QList<int> intersectingIndexes;
-        _zoneTree.Search(_zones[i].minLonLat, _zones[i].maxLonLat, [&intersectingIndexes](const int& index) {
+        tree.Search(zones[i].minLonLat, zones[i].maxLonLat, [&intersectingIndexes](const int& index) {
             intersectingIndexes.push_back(index);
             return true; // continue searching
         });
 
-        Clipper2Lib::PathsD currentPath = geoZoneToClipperPaths(_zones[i].polygon, _zones[i].holes);
-        if (currentPath.empty()) {
+        if (clipperPaths[i].empty()) {
             continue;
         }
 
         Clipper2Lib::ClipperD clipper(GEOZONE_CLIPPER_PRECISION);
-        clipper.AddSubject(currentPath);
+        clipper.AddSubject(clipperPaths[i]);
         bool hasClipPaths = false;
         for (int j : intersectingIndexes) {
-            // Only clip current zone intersections with OTHER zones of equal or higher priority (lower minAltitude)
-            if (i == j || _zones[i].minAltitude < _zones[j].minAltitude) {
+            if (i == j || zones[i].minAltitude < zones[j].minAltitude || clipperPaths[j].empty()) {
                 continue;
             }
 
-            Clipper2Lib::PathsD intersectingPath = geoZoneToClipperPaths(_zones[j].polygon, _zones[j].holes);
-            if (intersectingPath.empty()) {
-                continue;
-            }
-
-            clipper.AddClip(intersectingPath);
+            clipper.AddClip(clipperPaths[j]);
             hasClipPaths = true;
         }
 
-        // If no valid clip zone was added, clipping must be skipped to preserve the subject geometry.
+        // Without clip paths the subject geometry must be preserved as is
         if (!hasClipPaths) {
-            _zones[i].alreadyClipped = true;
+            zones[i].alreadyClipped = true;
             continue;
         }
 
-        // Clip the subject (zone[i]) against all intersecting zones (zone[j]) at once, storing the result in a PolyTreeD structure
         Clipper2Lib::PolyTreeD polyTree;
         clipper.Execute(Clipper2Lib::ClipType::Difference, Clipper2Lib::FillRule::NonZero, polyTree);
 
-        const double oldMin[2] = { _zones[i].minLonLat[0], _zones[i].minLonLat[1] };
-        const double oldMax[2] = { _zones[i].maxLonLat[0], _zones[i].maxLonLat[1] };
+        const double oldMin[2] = { zones[i].minLonLat[0], zones[i].minLonLat[1] };
+        const double oldMax[2] = { zones[i].maxLonLat[0], zones[i].maxLonLat[1] };
 
-        // Split top-level clipped contours into separate GeoZones (same metadata as subject zone).
+        // Split top-level clipped contours into separate zones (same metadata as the subject zone)
         QList<GeoZone> splitZones;
         for (auto outerIterator = polyTree.begin(); outerIterator != polyTree.end(); outerIterator++) {
             const Clipper2Lib::PolyPathD* outer = outerIterator->get();
@@ -270,7 +384,7 @@ void GeoZoneManager::clipAllZones()
                 continue;
             }
 
-            GeoZone splitZone = _zones[i];
+            GeoZone splitZone = zones[i];
             splitZone.polygon = clipperPathToGeoZone(outer->Polygon());
             splitZone.holes.clear();
 
@@ -286,38 +400,46 @@ void GeoZoneManager::clipAllZones()
             splitZones.append(splitZone);
         }
 
-        _zoneTree.Remove(oldMin, oldMax, i);
+        tree.Remove(oldMin, oldMax, i);
         if (splitZones.isEmpty()) {
-            // Remove the original zone if it was completely clipped away
-            _zones[i].polygon.clear();
-            _zones[i].holes.clear();
+            // Completely covered by higher priority zones
+            zones[i].polygon.clear();
+            zones[i].holes.clear();
+            clipperPaths[i].clear();
         } else {
-            // Keep first split in original slot.
-            _zones[i].polygon = splitZones.first().polygon;
-            _zones[i].holes = splitZones.first().holes;
-            insertZoneIntoTree(_zones[i], i);
+            // First split stays in the original slot
+            zones[i].polygon = splitZones.first().polygon;
+            zones[i].holes = splitZones.first().holes;
+            updateBoundingBox(zones[i]);
+            tree.Insert(zones[i].minLonLat, zones[i].maxLonLat, i);
+            clipperPaths[i] = geoZoneToClipperPaths(zones[i].polygon, zones[i].holes);
 
-            // Additional splits become new zones with same id/name/type/altitudes.
+            // Additional splits become new zones
             for (int splitIndex = 1; splitIndex < splitZones.size(); splitIndex++) {
                 GeoZone newSplitZone = splitZones[splitIndex];
                 newSplitZone.alreadyClipped = true;
-                _zones.append(newSplitZone);
-                insertZoneIntoTree(_zones.last(), _zones.size() - 1);
+                updateBoundingBox(newSplitZone);
+                zones.append(newSplitZone);
+                clipperPaths.push_back(geoZoneToClipperPaths(newSplitZone.polygon, newSplitZone.holes));
+                tree.Insert(newSplitZone.minLonLat, newSplitZone.maxLonLat, static_cast<int>(zones.size()) - 1);
             }
         }
 
-        _zones[i].alreadyClipped = true;
+        zones[i].alreadyClipped = true;
     }
 
-    _model.setZones(_zones);
-    emit countChanged();
-
-    qDebug() << "Finished clipping all zones.";
+    QList<GeoZone> result;
+    result.reserve(zones.size());
+    for (const GeoZone& zone : std::as_const(zones)) {
+        if (zone.polygon.size() >= 3) {
+            result.append(zone);
+        }
+    }
+    return result;
 }
 
-void GeoZoneManager::insertZoneIntoTree(GeoZone& zone, int index)
+void GeoZoneManager::updateBoundingBox(GeoZone& zone)
 {
-    // Compute bounding box for the zone
     double minLon = std::numeric_limits<double>::max();
     double minLat = std::numeric_limits<double>::max();
     double maxLon = std::numeric_limits<double>::lowest();
@@ -330,16 +452,8 @@ void GeoZoneManager::insertZoneIntoTree(GeoZone& zone, int index)
         maxLat = std::max(maxLat, coord.latitude());
     }
 
-    // Put min/max datas into arrays that can be passed by reference
-    double min[2] = { minLon, minLat };
-    double max[2] = { maxLon, maxLat };
-
-    // Cache bounding box in the zone for future intersection tests
     zone.minLonLat[0] = minLon;
     zone.minLonLat[1] = minLat;
     zone.maxLonLat[0] = maxLon;
     zone.maxLonLat[1] = maxLat;
-
-    // Insert into R-tree (using zone index as data)
-    _zoneTree.Insert(min, max, index);
 }

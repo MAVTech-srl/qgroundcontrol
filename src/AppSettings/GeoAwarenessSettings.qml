@@ -61,7 +61,6 @@ Item {
                             _mapAirspaceJsonFilePath.rawValue = ""
                             fileDialogAirspace.folder = root._appSettings.missionSavePath
                             QGroundControl.geoZoneManager.loadFromFile("")
-                            QGroundControl.geoZoneManager.clipAllZones()
                         }
                     }
 
@@ -98,7 +97,6 @@ Item {
                                 airspaceFileTextField.text = file
                                 _mapAirspaceJsonFilePath.value = airspaceFileTextField.text
                                 QGroundControl.geoZoneManager.loadFromFile(airspaceFileTextField.text)
-                                QGroundControl.geoZoneManager.clipAllZones()
                             }
                         }
                     }
