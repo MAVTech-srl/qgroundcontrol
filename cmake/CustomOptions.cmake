@@ -15,12 +15,13 @@ set(QGC_CUSTOM_DIR "custom" CACHE STRING "Custom build overlay directory, relati
 # ============================================================================
 
 set(QGC_APP_NAME "QGroundControl" CACHE STRING "Application name")
+set(QGC_ANDROID_APP_NAME "${QGC_APP_NAME}" CACHE STRING "MAVTech QGroundControl")
 string(TIMESTAMP _copyright_year "%Y")
 set(QGC_APP_COPYRIGHT "Copyright (c) ${_copyright_year} QGroundControl. All rights reserved." CACHE STRING "Copyright notice")
 set(QGC_APP_DESCRIPTION "Open Source Ground Control App" CACHE STRING "Application description")
 set(QGC_ORG_NAME "QGroundControl" CACHE STRING "Organization name")
 set(QGC_ORG_DOMAIN "qgroundcontrol.com" CACHE STRING "Organization domain")
-set(QGC_PACKAGE_NAME "org.mavlink.qgroundcontrol" CACHE STRING "Package identifier")
+set(QGC_PACKAGE_NAME "org.mavtech.qgroundcontrol" CACHE STRING "Package identifier")
 
 # Settings version - increment to clear stored settings on next boot after incompatible changes
 set(QGC_SETTINGS_VERSION "9" CACHE STRING "Settings schema version")
