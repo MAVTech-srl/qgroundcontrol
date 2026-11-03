@@ -58,7 +58,7 @@ Item {
                         text: qsTr("Clear")
 
                         onClicked: {
-                            _mapAirspaceJsonFilePath.value = ""
+                            _mapAirspaceJsonFilePath.rawValue = ""
                             fileDialogAirspace.folder = root._appSettings.missionSavePath
                             QGroundControl.geoZoneManager.loadFromFile("")
                             QGroundControl.geoZoneManager.clipAllZones()

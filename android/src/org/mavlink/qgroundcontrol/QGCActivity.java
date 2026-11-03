@@ -239,7 +239,7 @@ public class QGCActivity extends QtActivity {
         if (displayName == null || displayName.isEmpty()) {
             return false;
         }
-        return displayName.toLowerCase(java.util.Locale.ROOT).endsWith(".plan");
+        return displayName.toLowerCase(java.util.Locale.ROOT).endsWith(".plan") || displayName.toLowerCase(java.util.Locale.ROOT).endsWith(".json");
     }
 
     public static String getSDCardPath() {
