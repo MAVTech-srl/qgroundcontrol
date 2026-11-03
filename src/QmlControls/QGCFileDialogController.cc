@@ -131,7 +131,7 @@ QString QGCFileDialogController::fullFolderPathToShortMobilePath(const QString &
     const QString defaultSavePath = SettingsManager::instance()->appSettings()->savePath()->rawValueString();
     if (fullFolderPath.startsWith(defaultSavePath)) {
         const int lastDirSepIndex = fullFolderPath.lastIndexOf(QStringLiteral("/"));
-        return (QCoreApplication::applicationName() + QStringLiteral("/") + fullFolderPath.right(fullFolderPath.length() - lastDirSepIndex));
+        return (QCoreApplication::applicationName() + QStringLiteral("/") + fullFolderPath.right(fullFolderPath.length() - lastDirSepIndex - 1));
     }
 #else
     qCWarning(QGCFileDialogControllerLog) << Q_FUNC_INFO << "should only be used in mobile builds";
